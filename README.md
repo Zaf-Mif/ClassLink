@@ -55,6 +55,7 @@ Year → Semester → Department → Course → Content
 ---
 
 ## 📱 App Structure
+```
 lib/
 ├── core/
 │   ├── error/
@@ -90,7 +91,7 @@ lib/
 │   ├── models/
 │   └── services/
 └── main.dart
-
+```
 
 ---
 
