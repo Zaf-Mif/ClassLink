@@ -36,7 +36,6 @@ The system organizes academic content by department, year, and semester while en
 ClassLink is built around a structured academic model:
 Year → Semester → Department → Course → Content
 
-
 - Core courses are automatically assigned based on student year & semester
 - Elective courses can be manually selected by students
 - All materials are searchable but organized by course structure
@@ -49,7 +48,7 @@ Year → Semester → Department → Course → Content
 - Dart
 - Bloc (State Management)
 - Clean Architecture
-- Firebase / REST API (optional backend)
+- Firebase / REST API 
 - Socket.IO (for real-time messaging)
 
 ---
