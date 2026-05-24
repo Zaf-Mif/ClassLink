@@ -5,6 +5,7 @@ import '../../../../features/auth/data/models/user_model.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_event.dart';
 import '../../data/models/course_model.dart';
+import '../../../messaging/presentation/screens/conversations_screen.dart';
 import 'teacher_course_screen.dart';
 
 class TeacherHomeScreen extends StatefulWidget {
@@ -523,18 +524,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   }
 
   Widget _buildMessagesTab() {
-    return const SafeArea(
-      child: Center(
-        child: Text(
-          'Messages\nComing Soon',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 18,
-            color: AppColors.textGrey,
-          ),
-        ),
-      ),
-    );
+    return const ConversationsScreen();
   }
 
   Widget _buildProfileTab() {
