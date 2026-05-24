@@ -54,6 +54,7 @@ Year → Semester → Department → Course → Content
 ---
 
 ## 📱 App Structure
+```
 lib/
 ├── core/
 │   ├── error/
@@ -62,7 +63,6 @@ lib/
 │   ├── constants/
 │   ├── theme/
 │   └── usecases/
-
 ├── features/
 │   ├── auth/
 │   │   ├── data/
@@ -77,26 +77,20 @@ lib/
 │   │       ├── bloc/
 │   │       ├── pages/
 │   │       └── widgets/
-
 │   ├── courses/
 │   │   └── (same structure)
-
 │   ├── messaging/
 │   │   └── (same structure)
-
 │   ├── announcements/
 │   │   └── (same structure)
-
 │   ├── materials/
 │   │   └── (same structure)
-
 ├── shared/
 │   ├── widgets/
 │   ├── models/
 │   └── services/
-
 └── main.dart
-
+```
 
 ---
 
