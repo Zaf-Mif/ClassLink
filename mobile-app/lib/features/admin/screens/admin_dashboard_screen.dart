@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
-import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../data/models/department_model.dart';
+import '../data/models/section_model.dart';
+import '../data/repositories/admin_repository.dart';
 import '../../../injection/injection_container.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -12,8 +13,12 @@ class AdminDashboardScreen extends StatefulWidget {
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  final _repo = sl<AdminRepository>();
+
   int _currentIndex = 0;
   List<Map<String, dynamic>> _users = [];
+  List<DepartmentModel> _departments = [];
+  List<SectionModel> _sections = [];
   bool _loading = true;
   String? _error;
   String _userSearch = '';
@@ -21,99 +26,296 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUsers();
+    _loadAll();
   }
 
-  Future<void> _loadUsers() async {
-    setState(() { _loading = true; _error = null; });
+  Future<void> _loadAll() async {
+    setState(() => _loading = true);
     try {
-      final response = await sl<ApiClient>().dio.get('/admin/users');
-      _users = (response.data as List).cast<Map<String, dynamic>>();
-    } on DioException catch (e) {
-      _error = e.response?.data is Map
-          ? (e.response!.data as Map)['message']?.toString() ?? 'Failed to load users'
-          : 'Failed to load users';
+      final results = await Future.wait([
+        _repo.getUsers(),
+        _repo.getDepartments(),
+        _repo.getSections(),
+      ]);
+      if (!mounted) return;
+      _users = results[0] as List<Map<String, dynamic>>;
+      _departments = results[1] as List<DepartmentModel>;
+      _sections = results[2] as List<SectionModel>;
+      _error = null;
+    } catch (e) {
+      _error = e.toString().replaceAll('Exception: ', '');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _addUser(Map<String, dynamic> data) async {
-    try {
-      final response = await sl<ApiClient>().dio.post('/admin/users', data: data);
-      if (mounted) {
-        _users.add(response.data as Map<String, dynamic>);
-        setState(() {});
-      }
-    } on DioException catch (e) {
-      final msg = e.response?.data is Map
-          ? (e.response!.data as Map)['message']?.toString() ?? 'Failed to add user'
-          : 'Failed to add user';
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating),
-        );
-      }
-    }
+  void _showError(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating),
+    );
   }
 
+  void _showSuccess(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: AppColors.success, behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Add User Dialog
+  // ──────────────────────────────────────────────────────────────
+  Future<void> _showAddUserDialog() async {
+    final formKey = GlobalKey<FormState>();
+    String name = '', email = '', password = '';
+    String? departmentId, sectionId, yearStr;
+    final selectedRole = ValueNotifier<String>('student');
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => ValueListenableBuilder<String>(
+        valueListenable: selectedRole,
+        builder: (_, roleVal, __) => AlertDialog(
+          title: const Text('Create User'),
+          content: SizedBox(
+            width: 400,
+            child: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      decoration: const InputDecoration(labelText: 'Full Name'),
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      onSaved: (v) => name = v!.trim(),
+                    ),
+                    TextFormField(
+                      decoration: const InputDecoration(labelText: 'Email', hintText: 'first.last@astu.edu.et'),
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Required';
+                        if (!RegExp(r'^[a-zA-Z]+\.[a-zA-Z]+@astu\.edu\.et$').hasMatch(v)) {
+                          return 'Must be first.last@astu.edu.et';
+                        }
+                        return null;
+                      },
+                      onSaved: (v) => email = v!.trim(),
+                    ),
+                    TextFormField(
+                      decoration: const InputDecoration(labelText: 'Password'),
+                      obscureText: true,
+                      validator: (v) => (v == null || v.length < 6) ? 'Min 6 characters' : null,
+                      onSaved: (v) => password = v!,
+                    ),
+                    DropdownButtonFormField<String>(
+                      value: roleVal,
+                      decoration: const InputDecoration(labelText: 'Role'),
+                      items: const [
+                        DropdownMenuItem(value: 'student', child: Text('Student')),
+                        DropdownMenuItem(value: 'teacher', child: Text('Teacher')),
+                        DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                      ],
+                      onChanged: (v) => selectedRole.value = v ?? 'student',
+                    ),
+                    if (roleVal == 'student' || roleVal == 'teacher') ...[
+                      DropdownButtonFormField<String>(
+                        decoration: const InputDecoration(labelText: 'Department'),
+                        items: _departments.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))).toList(),
+                        onChanged: (v) => departmentId = v,
+                      ),
+                      if (roleVal == 'student') ...[
+                        TextFormField(
+                          decoration: const InputDecoration(labelText: 'Year', hintText: 'e.g. 3'),
+                          keyboardType: TextInputType.number,
+                          onSaved: (v) => yearStr = v,
+                        ),
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(labelText: 'Section'),
+                          items: _sections
+                              .where((s) => departmentId == null || s.departmentId == departmentId)
+                              .map((s) => DropdownMenuItem(value: s.id, child: Text(s.label)))
+                              .toList(),
+                          onChanged: (v) => sectionId = v,
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+                formKey.currentState!.save();
+                try {
+                  final created = await _repo.createUser({
+                    'name': name,
+                    'email': email,
+                    'password': password,
+                    'role': selectedRole.value,
+                    'departmentId': departmentId,
+                    'year': yearStr,
+                    'semester': yearStr ?? '',
+                    if (sectionId != null) 'sectionId': sectionId,
+                  });
+                  if (!ctx.mounted) return;
+                  Navigator.pop(ctx);
+                  setState(() => _users.insert(0, created));
+                  _showSuccess('User created successfully');
+                } catch (e) {
+                  _showError(e.toString().replaceAll('Exception: ', ''));
+                }
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Edit User Dialog
+  // ──────────────────────────────────────────────────────────────
+  Future<void> _showEditUserDialog(Map<String, dynamic> user) async {
+    final formKey = GlobalKey<FormState>();
+    String name = user['name'] ?? '';
+    String email = user['email'] ?? '';
+    String role = user['role'] ?? 'student';
+    String? departmentId = user['departmentId']?.toString();
+    String? sectionId = user['sectionId']?.toString();
+    String? password;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit User'),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    initialValue: name,
+                    decoration: const InputDecoration(labelText: 'Full Name'),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    onSaved: (v) => name = v!.trim(),
+                  ),
+                  TextFormField(
+                    initialValue: email,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      if (!RegExp(r'^[a-zA-Z]+\.[a-zA-Z]+@astu\.edu\.et$').hasMatch(v)) {
+                        return 'Must be first.last@astu.edu.et';
+                      }
+                      return null;
+                    },
+                    onSaved: (v) => email = v!.trim(),
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'New Password (leave blank to keep)'),
+                    obscureText: true,
+                    validator: (v) => (v != null && v.isNotEmpty && v.length < 6) ? 'Min 6 characters' : null,
+                    onSaved: (v) => password = (v != null && v.isNotEmpty) ? v : null,
+                  ),
+                  DropdownButtonFormField<String>(
+                    value: role,
+                    decoration: const InputDecoration(labelText: 'Role'),
+                    items: const [
+                      DropdownMenuItem(value: 'student', child: Text('Student')),
+                      DropdownMenuItem(value: 'teacher', child: Text('Teacher')),
+                      DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                    ],
+                    onChanged: (v) => role = v ?? 'student',
+                  ),
+                  DropdownButtonFormField<String?>(
+                    value: departmentId,
+                    decoration: const InputDecoration(labelText: 'Department'),
+                    items: [
+                      const DropdownMenuItem(value: null, child: Text('None')),
+                      ..._departments
+                          .map((d) => DropdownMenuItem<String?>(value: d.id, child: Text(d.name))),
+                    ],
+                    onChanged: (v) => departmentId = v,
+                  ),
+                  if (role == 'student')
+                    DropdownButtonFormField<String?>(
+                      value: sectionId,
+                      decoration: const InputDecoration(labelText: 'Section'),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('None')),
+                        ..._sections
+                            .where((s) => departmentId == null || s.departmentId == departmentId)
+                            .map((s) => DropdownMenuItem<String?>(value: s.id, child: Text(s.label))),
+                      ],
+                      onChanged: (v) => sectionId = v,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              formKey.currentState!.save();
+              try {
+                final updated = await _repo.updateUser(user['id'].toString(), {
+                  'name': name,
+                  'email': email,
+                  if (password != null) 'password': password,
+                  'role': role,
+                  'departmentId': departmentId,
+                  'sectionId': sectionId,
+                });
+                if (!ctx.mounted) return;
+                Navigator.pop(ctx);
+                setState(() {
+                  final idx = _users.indexWhere((u) => u['id'].toString() == updated['id'].toString());
+                  if (idx >= 0) _users[idx] = updated;
+                });
+                _showSuccess('User updated');
+              } catch (e) {
+                _showError(e.toString().replaceAll('Exception: ', ''));
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Tabs
+  // ──────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          _buildDashboardTab(),
-          _buildUsersTab(),
-        ],
-      ),
-      bottomNavigationBar: _buildBottomNav(),
-    );
-  }
-
-  Widget _buildBottomNav() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 10,
-            offset: const Offset(0, -2),
+      appBar: AppBar(
+        title: const Text('Admin Panel'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadAll,
           ),
         ],
       ),
-      child: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: AppColors.card,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textGrey,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_outlined),
-            activeIcon: Icon(Icons.dashboard_rounded),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people_outline),
-            activeIcon: Icon(Icons.people_rounded),
-            label: 'Users',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDashboardTab() {
-    final totalStudents = _users.where((u) => u['role'] == 'student').length;
-    final totalTeachers = _users.where((u) => u['role'] == 'teacher').length;
-    final totalAdmins = _users.where((u) => u['role'] == 'admin').length;
-
-    return SafeArea(
-      child: _loading
+      body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(
@@ -122,97 +324,75 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     children: [
                       Text(_error!, style: const TextStyle(color: AppColors.error)),
                       const SizedBox(height: 16),
-                      ElevatedButton(onPressed: _loadUsers, child: const Text('Retry')),
+                      ElevatedButton(onPressed: _loadAll, child: const Text('Retry')),
                     ],
                   ),
                 )
-              : RefreshIndicator(
-                  onRefresh: _loadUsers,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.admin_panel_settings_rounded, color: Colors.white),
-                            ),
-                            const SizedBox(width: 12),
-                            const Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Admin Panel',
-                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textDark),
-                                ),
-                                Text(
-                                  'Adama Science and Technology University',
-                                  style: TextStyle(fontSize: 11, color: AppColors.textGrey),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        GridView.count(
-                          crossAxisCount: 2,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.4,
-                          children: [
-                            _buildStatCard('Students', '$totalStudents', Icons.school_rounded, AppColors.primary),
-                            _buildStatCard('Teachers', '$totalTeachers', Icons.person_rounded, AppColors.success),
-                            _buildStatCard('Admins', '$totalAdmins', Icons.admin_panel_settings_rounded, AppColors.accent),
-                            _buildStatCard('Total Users', '${_users.length}', Icons.people_rounded, AppColors.warning),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        const Text(
-                          'All Users',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textDark),
-                        ),
-                        const SizedBox(height: 12),
-                        ..._users.take(5).map((user) => _buildUserListItem(user)),
-                      ],
-                    ),
-                  ),
+              : IndexedStack(
+                  index: _currentIndex,
+                  children: [
+                    _buildDashboardTab(),
+                    _buildUsersTab(),
+                  ],
                 ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (i) => setState(() => _currentIndex = i),
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: AppColors.card,
+        selectedItemColor: AppColors.primary,
+        unselectedItemColor: AppColors.textGrey,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Users'),
+        ],
+      ),
+      floatingActionButton: _currentIndex == 1
+          ? FloatingActionButton(
+              onPressed: _showAddUserDialog,
+              backgroundColor: AppColors.primary,
+              child: const Icon(Icons.add, color: Colors.white),
+            )
+          : null,
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: AppColors.shadow, blurRadius: 8, offset: const Offset(0, 2))],
-      ),
+  Widget _buildDashboardTab() {
+    final teacherCount = _users.where((u) => u['role'] == 'teacher').length;
+    final studentCount = _users.where((u) => u['role'] == 'student').length;
+    final adminCount = _users.where((u) => u['role'] == 'admin').length;
+
+    return Padding(
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const Text('Overview', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.textDark)),
+          const SizedBox(height: 20),
+          Row(
             children: [
-              Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textDark)),
-              Text(title, style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
+              _StatCard('Teachers', teacherCount.toString(), Icons.school, AppColors.primary),
+              const SizedBox(width: 12),
+              _StatCard('Students', studentCount.toString(), Icons.people, AppColors.success),
+              const SizedBox(width: 12),
+              _StatCard('Admins', adminCount.toString(), Icons.admin_panel_settings, AppColors.warning),
             ],
+          ),
+          const SizedBox(height: 24),
+          const Text('Departments', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textDark)),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _departments.length,
+              itemBuilder: (_, i) {
+                final dept = _departments[i];
+                final count = _users.where((u) => u['departmentId']?.toString() == dept.id).length;
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(title: Text(dept.name), trailing: Text('$count users')),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -220,203 +400,84 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildUsersTab() {
-    final filtered = _users.where((u) =>
-        (u['name'] ?? '').toString().toLowerCase().contains(_userSearch.toLowerCase()) ||
-        (u['email'] ?? '').toString().toLowerCase().contains(_userSearch.toLowerCase())).toList();
+    final filtered = _users.where((u) {
+      final q = _userSearch.toLowerCase();
+      return q.isEmpty ||
+          (u['name']?.toString().toLowerCase().contains(q) ?? false) ||
+          (u['email']?.toString().toLowerCase().contains(q) ?? false);
+    }).toList();
 
-    return SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    onChanged: (v) => setState(() => _userSearch = v),
-                    decoration: InputDecoration(
-                      hintText: 'Search users...',
-                      prefixIcon: const Icon(Icons.search, color: AppColors.textGrey),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
-                      filled: true, fillColor: AppColors.card,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                GestureDetector(
-                  onTap: () => _showAddUserDialog(),
-                  child: Container(
-                    width: 44, height: 44,
-                    decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.add, color: Colors.white),
-                  ),
-                ),
-              ],
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: TextField(
+            decoration: const InputDecoration(
+              hintText: 'Search users...',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
             ),
+            onChanged: (v) => setState(() => _userSearch = v),
           ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : RefreshIndicator(
-                    onRefresh: _loadUsers,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: filtered.length,
-                      itemBuilder: (_, i) => _buildUserListItem(filtered[i]),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: filtered.length,
+            itemBuilder: (_, i) {
+              final u = filtered[i];
+              final roleColors = <String, Color>{
+                'admin': AppColors.warning,
+                'teacher': AppColors.primary,
+                'student': AppColors.success,
+              };
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: (roleColors[u['role']] ?? AppColors.textGrey).withOpacity(0.2),
+                    child: Text(
+                      ((u['name'] ?? '') as String).substring(0, 1).toUpperCase(),
+                      style: TextStyle(
+                        color: roleColors[u['role']] ?? AppColors.textGrey,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
+                  title: Text(u['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text('${u['email']}  •  ${u['role']}'),
+                  trailing: const Icon(Icons.edit, color: AppColors.textGrey),
+                  onTap: () => _showEditUserDialog(u),
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
+}
 
-  Widget _buildUserListItem(Map<String, dynamic> user) {
-    final role = (user['role'] ?? '').toString();
-    final name = (user['name'] ?? '').toString();
-    final email = (user['email'] ?? '').toString();
-    Color roleColor = role == 'teacher' ? AppColors.success : role == 'admin' ? AppColors.accent : AppColors.primary;
+class _StatCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: AppColors.shadow, blurRadius: 6, offset: const Offset(0, 2))],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(color: roleColor.withOpacity(0.1), shape: BoxShape.circle),
-            child: Center(child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: roleColor),
-            )),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textDark)),
-                Text(email, style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(color: roleColor.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-            child: Text(role, style: TextStyle(fontSize: 11, color: roleColor, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
+  const _StatCard(this.label, this.value, this.icon, this.color);
 
-  void _showAddUserDialog() {
-    final nameController = TextEditingController();
-    final emailController = TextEditingController();
-    String selectedRole = 'student';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          child: Container(
-            height: MediaQuery.of(context).size.height * 0.65,
-            decoration: const BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.divider, borderRadius: BorderRadius.circular(2)))),
-                const SizedBox(height: 20),
-                const Text('Add New User', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textDark)),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Full Name', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark)),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: nameController,
-                          decoration: InputDecoration(
-                            hintText: 'First Last',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
-                            filled: true, fillColor: AppColors.background,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text('University Email', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark)),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: emailController,
-                          decoration: InputDecoration(
-                            hintText: 'first.last@astu.edu.et',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.divider)),
-                            filled: true, fillColor: AppColors.background,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text('Role', style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textDark)),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: ['student', 'teacher', 'admin'].map((role) {
-                            final isSelected = selectedRole == role;
-                            return GestureDetector(
-                              onTap: () => setModalState(() => selectedRole = role),
-                              child: Container(
-                                margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: isSelected ? AppColors.primary : AppColors.background,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: isSelected ? AppColors.primary : AppColors.divider),
-                                ),
-                                child: Text(role, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: isSelected ? Colors.white : AppColors.textGrey)),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (nameController.text.isNotEmpty && emailController.text.isNotEmpty) {
-                        _addUser({
-                          'name': nameController.text,
-                          'email': emailController.text,
-                          'password': 'password123',
-                          'role': selectedRole,
-                        });
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('User added successfully!'), backgroundColor: AppColors.success, behavior: SnackBarBehavior.floating),
-                        );
-                      }
-                    },
-                    child: const Text('Add User'),
-                  ),
-                ),
-              ],
-            ),
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 32),
+              const SizedBox(height: 8),
+              Text(value, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: color)),
+              Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textGrey)),
+            ],
           ),
         ),
       ),

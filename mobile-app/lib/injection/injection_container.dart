@@ -4,6 +4,7 @@ import '../features/auth/data/datasources/auth_remote_datasource.dart';
 import '../features/auth/presentation/bloc/auth_bloc.dart';
 import '../features/courses/data/repositories/course_repository.dart';
 import '../features/courses/presentation/bloc/course_bloc.dart';
+import '../features/admin/data/repositories/admin_repository.dart';
 import '../features/announcements/data/repositories/announcement_repository.dart';
 import '../features/announcements/presentation/bloc/announcement_bloc.dart';
 import '../features/assignments/data/repositories/assignment_repository.dart';
@@ -47,6 +48,9 @@ Future<void> initDependencies() async {
   );
   sl.registerLazySingleton<NotificationRepository>(
     () => NotificationRepository(sl()),
+  );
+  sl.registerLazySingleton<AdminRepository>(
+    () => AdminRepository(sl()),
   );
 
   // BLoCs

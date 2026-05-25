@@ -1,0 +1,15 @@
+class DepartmentModel {
+  final String id;
+  final String name;
+
+  const DepartmentModel({required this.id, required this.name});
+
+  factory DepartmentModel.fromJson(Map<String, dynamic> json) {
+    return DepartmentModel(
+      id: json['id']?.toString() ?? '',
+      name: json['name'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name};
+}
