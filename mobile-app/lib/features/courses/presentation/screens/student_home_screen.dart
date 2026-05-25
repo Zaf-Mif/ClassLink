@@ -7,6 +7,7 @@ import '../../../../features/auth/data/models/user_model.dart';
 import '../../data/models/course_model.dart';
 import '../../../messaging/presentation/screens/conversations_screen.dart';
 import 'course_screen.dart';
+import 'search_screen.dart';
 
 class StudentHomeScreen extends StatefulWidget {
   final UserModel user;
@@ -472,19 +473,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Widget _buildSearchTab() {
-    return const SafeArea(
-      child: Center(
-        child: Text(
-          'Search\nComing Soon',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 18,
-            color: AppColors.textGrey,
-            fontFamily: 'Poppins',
-          ),
-        ),
-      ),
-    );
+    return const SearchScreen();
   }
 
   Widget _buildProfileTab() {
