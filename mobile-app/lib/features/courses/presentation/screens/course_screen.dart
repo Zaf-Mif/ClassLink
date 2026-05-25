@@ -3,13 +3,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:get_it/get_it.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../features/announcements/data/models/announcement_model.dart';
 import '../../../../features/assignments/data/models/assignment_model.dart';
-import '../../../../features/files/data/models/file_item_model.dart';
-import '../../../../features/forum/data/models/forum_question_model.dart';
-import '../../../../features/forum/data/models/forum_answer_model.dart';
+import '../../../../features/files/presentation/bloc/file_bloc.dart';
+import '../../../../features/files/presentation/bloc/file_event.dart';
+import '../../../../features/files/presentation/bloc/file_state.dart';
 import '../../data/models/course_model.dart';
 import '../../../announcements/presentation/bloc/announcement_bloc.dart';
 import '../../../announcements/presentation/bloc/announcement_event.dart';
@@ -17,14 +16,10 @@ import '../../../announcements/presentation/bloc/announcement_state.dart';
 import '../../../assignments/presentation/bloc/assignment_bloc.dart';
 import '../../../assignments/presentation/bloc/assignment_event.dart';
 import '../../../assignments/presentation/bloc/assignment_state.dart';
-import '../../../files/presentation/bloc/file_bloc.dart';
-import '../../../files/presentation/bloc/file_event.dart';
-import '../../../files/presentation/bloc/file_state.dart';
 import '../../../forum/presentation/bloc/forum_bloc.dart';
 import '../../../forum/presentation/bloc/forum_event.dart';
 import '../../../forum/presentation/bloc/forum_state.dart';
-
-final sl = GetIt.instance;
+import '../../../../injection/injection_container.dart';
 
 class CourseScreen extends StatefulWidget {
   final CourseModel course;

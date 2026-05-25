@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/course_model.dart';
 import '../../../assignments/data/models/assignment_model.dart';
@@ -17,9 +16,9 @@ import '../../../files/presentation/bloc/file_state.dart';
 import '../../../forum/presentation/bloc/forum_bloc.dart';
 import '../../../forum/presentation/bloc/forum_event.dart';
 import '../../../forum/presentation/bloc/forum_state.dart';
+import '../../../forum/data/models/forum_question_model.dart';
 import '../../../files/data/models/file_item_model.dart';
-
-final sl = GetIt.instance;
+import '../../../../injection/injection_container.dart';
 
 class TeacherCourseScreen extends StatefulWidget {
   final CourseModel course;

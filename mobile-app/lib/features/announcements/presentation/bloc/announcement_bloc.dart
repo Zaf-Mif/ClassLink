@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/repositories/announcement_repository.dart';
+import '../../data/models/announcement_model.dart';
 import 'announcement_event.dart';
 import 'announcement_state.dart';
 

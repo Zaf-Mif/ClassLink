@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../features/auth/data/models/user_model.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_event.dart';
 import '../../data/models/course_model.dart';
-import '../../data/repositories/course_repository.dart';
 import '../../../announcements/presentation/bloc/announcement_bloc.dart';
 import '../../../announcements/presentation/bloc/announcement_event.dart';
 import '../../../announcements/presentation/bloc/announcement_state.dart';
@@ -15,8 +13,7 @@ import '../../presentation/bloc/course_bloc.dart';
 import '../../presentation/bloc/course_event.dart';
 import '../../presentation/bloc/course_state.dart';
 import 'teacher_course_screen.dart';
-
-final sl = GetIt.instance;
+import '../../../../injection/injection_container.dart';
 
 class TeacherHomeScreen extends StatefulWidget {
   final UserModel user;

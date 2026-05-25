@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:get_it/get_it.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../features/auth/data/models/user_model.dart';
 import '../../data/models/message_model.dart';
 import '../../presentation/bloc/message_bloc.dart';
 import '../../presentation/bloc/message_event.dart';
 import '../../presentation/bloc/message_state.dart';
-
-final sl = GetIt.instance;
+import '../../../../injection/injection_container.dart';
 
 class ChatScreen extends StatefulWidget {
   final String receiverId;

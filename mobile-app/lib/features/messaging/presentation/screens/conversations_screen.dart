@@ -112,7 +112,7 @@ class ConversationsScreen extends StatelessWidget {
                   builder: (_) => ChatScreen(
                     receiverId: conversation.id,
                     receiverName: conversation.name,
-                    currentUser: widget.currentUser ?? UserModel(id: '', name: '', email: '', role: ''),
+                    currentUser: currentUser ?? UserModel(id: '', name: '', email: '', role: ''),
                   ),
                 ),
               );

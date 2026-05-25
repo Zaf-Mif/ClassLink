@@ -2,13 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
-import 'package:get_it/get_it.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/user_model.dart';
 import '../../../courses/presentation/screens/student_home_screen.dart';
-
-final sl = GetIt.instance;
+import '../../../../injection/injection_container.dart';
 
 class OtpScreen extends StatefulWidget {
   final String email;

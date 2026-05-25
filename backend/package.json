@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "seed:users": "node scripts/seed_users.js"
+    "seed:users": "node scripts/seed_users.js",
+    "seed:all": "node scripts/seed_all.js",
+    "reset:db": "node scripts/reset_db.js"
   },
   "dependencies": {
     "express": "^4.18.2",
