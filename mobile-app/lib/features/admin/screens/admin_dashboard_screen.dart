@@ -17,6 +17,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   int _currentIndex = 0;
   List<Map<String, dynamic>> _users = [];
+  List<Map<String, dynamic>> _courses = [];
   List<DepartmentModel> _departments = [];
   List<SectionModel> _sections = [];
   bool _loading = true;
@@ -34,13 +35,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     try {
       final results = await Future.wait([
         _repo.getUsers(),
+        _repo.getCourses(),
         _repo.getDepartments(),
         _repo.getSections(),
       ]);
       if (!mounted) return;
       _users = results[0] as List<Map<String, dynamic>>;
-      _departments = results[1] as List<DepartmentModel>;
-      _sections = results[2] as List<SectionModel>;
+      _courses = results[1] as List<Map<String, dynamic>>;
+      _departments = results[2] as List<DepartmentModel>;
+      _sections = results[3] as List<SectionModel>;
       _error = null;
     } catch (e) {
       _error = e.toString().replaceAll('Exception: ', '');
@@ -333,6 +336,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   children: [
                     _buildDashboardTab(),
                     _buildUsersTab(),
+                    _buildCoursesTab(),
                   ],
                 ),
       bottomNavigationBar: BottomNavigationBar(
@@ -345,6 +349,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Users'),
+          BottomNavigationBarItem(icon: Icon(Icons.school), label: 'Courses'),
         ],
       ),
       floatingActionButton: _currentIndex == 1
@@ -353,14 +358,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               backgroundColor: AppColors.primary,
               child: const Icon(Icons.add, color: Colors.white),
             )
-          : null,
+          : _currentIndex == 2
+              ? FloatingActionButton(
+                  onPressed: _showAddCourseDialog,
+                  backgroundColor: AppColors.primary,
+                  child: const Icon(Icons.add, color: Colors.white),
+                )
+              : null,
     );
   }
 
   Widget _buildDashboardTab() {
     final teacherCount = _users.where((u) => u['role'] == 'teacher').length;
     final studentCount = _users.where((u) => u['role'] == 'student').length;
-    final adminCount = _users.where((u) => u['role'] == 'admin').length;
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -375,7 +385,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               const SizedBox(width: 12),
               _StatCard('Students', studentCount.toString(), Icons.people, AppColors.success),
               const SizedBox(width: 12),
-              _StatCard('Admins', adminCount.toString(), Icons.admin_panel_settings, AppColors.warning),
+              _StatCard('Courses', _courses.length.toString(), Icons.menu_book, AppColors.accent),
             ],
           ),
           const SizedBox(height: 24),
@@ -453,6 +463,129 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Add Course Dialog
+  // ──────────────────────────────────────────────────────────────
+  Future<void> _showAddCourseDialog() async {
+    final formKey = GlobalKey<FormState>();
+    String name = '';
+    String year = '';
+    String semester = '';
+    String? departmentId;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Create Course'),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Course Name'),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    onSaved: (v) => name = v!.trim(),
+                  ),
+                  DropdownButtonFormField<String?>(
+                    decoration: const InputDecoration(labelText: 'Department'),
+                    items: [
+                      const DropdownMenuItem<String?>(value: null, child: Text('None')),
+                      ..._departments
+                          .map((d) => DropdownMenuItem<String?>(value: d.id, child: Text(d.name))),
+                    ],
+                    onChanged: (v) => departmentId = v,
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Year', hintText: 'e.g. 3'),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    onSaved: (v) => year = v!.trim(),
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Semester', hintText: 'e.g. 1'),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    onSaved: (v) => semester = v!.trim(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              formKey.currentState!.save();
+              try {
+                final created = await _repo.createCourse({
+                  'name': name,
+                  'departmentId': departmentId,
+                  'year': year,
+                  'semester': semester,
+                });
+                if (!ctx.mounted) return;
+                Navigator.pop(ctx);
+                setState(() => _courses.insert(0, created));
+                _showSuccess('Course created successfully');
+              } catch (e) {
+                _showError(e.toString().replaceAll('Exception: ', ''));
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // Courses Tab
+  // ──────────────────────────────────────────────────────────────
+  Widget _buildCoursesTab() {
+    if (_courses.isEmpty) {
+      return const Center(
+        child: Text('No courses yet', style: TextStyle(color: AppColors.textGrey)),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: _courses.length,
+      itemBuilder: (_, i) {
+        final c = _courses[i];
+        final deptName = _departments
+            .where((d) => d.id == c['departmentId']?.toString())
+            .map((d) => d.name)
+            .firstOrNull;
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.school, color: AppColors.primary),
+            ),
+            title: Text(c['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(
+              'Year ${c['year']}  •  Sem ${c['semester']}'
+              '${deptName != null ? '  •  $deptName' : ''}',
+              style: const TextStyle(fontSize: 13, color: AppColors.textGrey),
+            ),
+          ),
+        );
+      },
     );
   }
 }

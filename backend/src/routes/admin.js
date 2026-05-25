@@ -216,6 +216,36 @@ router.get('/courses', auth(['admin']), async (req, res) => {
   }
 });
 
+// POST /admin/courses — create a new course
+router.post('/courses', auth(['admin']), async (req, res) => {
+  try {
+    const { name, departmentId, year, semester } = req.body;
+
+    if (!name || !year || !semester) {
+      return res.status(400).json({ message: 'Name, year, and semester are required.' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO courses (name, department_id, year, semester)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [name, departmentId || null, year, semester]
+    );
+
+    const course = result.rows[0];
+    res.status(201).json({
+      id: course.id.toString(),
+      name: course.name,
+      departmentId: course.department_id ? course.department_id.toString() : null,
+      year: course.year.toString(),
+      semester: course.semester.toString(),
+    });
+  } catch (err) {
+    console.error('Admin create course error:', err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
 // POST /admin/course-teacher-section — assign a teacher to a course+section
 router.post('/course-teacher-section', auth(['admin']), async (req, res) => {
   try {

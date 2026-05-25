@@ -58,6 +58,25 @@ class AdminRepository {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getCourses({String? departmentId}) async {
+    try {
+      final query = departmentId != null ? {'departmentId': departmentId} : null;
+      final response = await apiClient.dio.get('/admin/courses', queryParameters: query);
+      return (response.data as List).cast<Map<String, dynamic>>();
+    } on DioException catch (e) {
+      throw Exception(_mapError(e));
+    }
+  }
+
+  Future<Map<String, dynamic>> createCourse(Map<String, dynamic> data) async {
+    try {
+      final response = await apiClient.dio.post('/admin/courses', data: data);
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw Exception(_mapError(e));
+    }
+  }
+
   Future<void> assignTeacher(String courseId, String teacherId, String sectionId) async {
     try {
       await apiClient.dio.post('/admin/course-teacher-section', data: {
