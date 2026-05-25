@@ -39,7 +39,17 @@ async function reset() {
       console.log(`  ${res.rowCount.toString().padStart(4)} rows deleted from ${table}`);
     }
     await client.query('SET session_replication_role = DEFAULT;');
-    console.log('\nAll tables cleared. Re-run `npm run seed:all` to repopulate.');
+    // Reset serial sequences so IDs start from 1 again
+    for (const table of TABLES) {
+      const seq = await client.query(
+        `SELECT pg_get_serial_sequence($1, 'id') AS seq`, [table]
+      );
+      const seqName = seq.rows[0]?.seq;
+      if (seqName) {
+        await client.query(`ALTER SEQUENCE ${seqName} RESTART WITH 1`);
+      }
+    }
+    console.log('\nAll tables cleared and sequences reset. Re-run `npm run seed:all` to repopulate.');
   } finally {
     client.release();
     await pool.end();

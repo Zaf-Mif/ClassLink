@@ -51,6 +51,19 @@ async function seed() {
     const hash = await bcrypt.hash(COMMON_PASSWORD, 10);
     console.log(`Password for all users: ${COMMON_PASSWORD}\n`);
 
+    // Ensure departments exist (from init.sql)
+    const DEPARTMENTS = [
+      'Software Engineering',
+      'Computer Science and Engineering',
+      'Information Technology',
+    ];
+    for (const name of DEPARTMENTS) {
+      await client.query(
+        'INSERT INTO departments (name) VALUES ($1) ON CONFLICT DO NOTHING',
+        [name]
+      );
+    }
+
     let created = 0, skipped = 0;
 
     for (const u of users) {

@@ -171,9 +171,35 @@ async function seed() {
     console.log(`Password for all users: ${COMMON_PASSWORD}\n`);
 
     // ---------------------------------------------------------------
+    // 0. SEED DEPARTMENTS (base data from init.sql)
+    // ---------------------------------------------------------------
+    console.log('--- Departments ---');
+    const DEPARTMENTS = [
+      'Software Engineering',
+      'Computer Science and Engineering',
+      'Information Technology',
+    ];
+    const deptCache = {};
+    for (const name of DEPARTMENTS) {
+      const existing = await client.query('SELECT id FROM departments WHERE name = $1', [name]);
+      if (existing.rows.length > 0) {
+        deptCache[name] = existing.rows[0].id;
+        continue;
+      }
+      const res = await client.query(
+        'INSERT INTO departments (name) VALUES ($1) RETURNING id',
+        [name]
+      );
+      deptCache[name] = res.rows[0].id;
+      console.log(`  OK    ${name}`);
+    }
+    // Verify department IDs match inline SECTION_DEFS (1-based)
+    console.log('  (mapped: SWE=1, CSE=2, IT=3)');
+
+    // ---------------------------------------------------------------
     // 1. SEED SECTIONS
     // ---------------------------------------------------------------
-    console.log('--- Sections ---');
+    console.log('\n--- Sections ---');
     const sectionCache = {}; // "name_year_sem_dept" -> id
     for (const [name, year, sem, deptId] of SECTION_DEFS) {
       const key = `${name}_${year}_${sem}_${deptId}`;
