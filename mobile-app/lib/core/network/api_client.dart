@@ -4,6 +4,7 @@ import '../constants/app_constants.dart';
 
 class ApiClient {
   late final Dio _dio;
+  static String? _token;
 
   ApiClient() {
     _dio = Dio(
@@ -18,6 +19,9 @@ class ApiClient {
   }
 
   Dio get dio => _dio;
+
+  static void setToken(String? token) => _token = token;
+  static String? get token => _token;
 }
 
 class _AuthInterceptor extends Interceptor {
@@ -28,7 +32,12 @@ class _AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    final token = await _secureStorage.read(key: AppConstants.tokenKey);
+    String? token = ApiClient._token;
+    if (token == null) {
+      try {
+        token = await _secureStorage.read(key: AppConstants.tokenKey);
+      } catch (_) {}
+    }
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
     }
@@ -38,8 +47,11 @@ class _AuthInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     if (err.response?.statusCode == 401) {
-      const secureStorage = FlutterSecureStorage();
-      await secureStorage.deleteAll();
+      ApiClient._token = null;
+      try {
+        const secureStorage = FlutterSecureStorage();
+        await secureStorage.deleteAll();
+      } catch (_) {}
     }
     handler.next(err);
   }

@@ -18,6 +18,7 @@ class AuthRemoteDataSource {
         data: {'email': email, 'password': password},
       );
       final user = UserModel.fromJson(response.data);
+      ApiClient.setToken(user.token);
       await _saveToken(user.token ?? '');
       await _saveUser(user);
       return user;
