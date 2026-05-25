@@ -8,8 +8,3 @@ class MarkNotificationRead extends NotificationEvent {
 }
 
 class MarkAllNotificationsRead extends NotificationEvent {}
-
-class RegisterFcmToken extends NotificationEvent {
-  final String token;
-  RegisterFcmToken(this.token);
-}

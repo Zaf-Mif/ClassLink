@@ -1,7 +1,7 @@
 const express = require('express');
 const pool = require('../config/database');
 const auth = require('../middleware/auth');
-const { sendPushToUser } = require('../services/notificationService');
+
 
 const router = express.Router();
 
@@ -80,12 +80,6 @@ router.post('/:courseId/questions', auth(['student']), async (req, res) => {
          VALUES ($1, 'forum', $2, $3, $4)`,
         [teacher.teacher_id, question.id, `New Question`, questionTitle]
       );
-      sendPushToUser(
-        teacher.teacher_id,
-        `New Question in Course`,
-        questionTitle,
-        { type: 'forum', referenceId: question.id.toString() }
-      ).catch(() => {});
     }
 
     res.status(201).json({
@@ -147,12 +141,6 @@ router.post('/questions/:id/answers', auth(['teacher', 'admin']), async (req, re
        VALUES ($1, 'answer', $2, $3, $4)`,
       [question.student_id, id, `Your Question Answered`, answerSnippet]
     );
-    sendPushToUser(
-      question.student_id,
-      `Your Question Answered`,
-      answerSnippet,
-      { type: 'answer', referenceId: id.toString() }
-    ).catch(() => {});
 
     res.status(201).json({
       id: answer.id.toString(),

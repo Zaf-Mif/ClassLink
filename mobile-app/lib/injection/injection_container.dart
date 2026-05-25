@@ -1,6 +1,5 @@
 import 'package:get_it/get_it.dart';
 import '../core/network/api_client.dart';
-import '../core/services/fcm_service.dart';
 import '../features/auth/data/datasources/auth_remote_datasource.dart';
 import '../features/auth/presentation/bloc/auth_bloc.dart';
 import '../features/courses/data/repositories/course_repository.dart';
@@ -24,7 +23,6 @@ final sl = GetIt.instance;
 Future<void> initDependencies() async {
   // Core
   sl.registerLazySingleton<ApiClient>(() => ApiClient());
-  sl.registerLazySingleton<FcmService>(() => FcmService(sl()));
 
   // Repositories
   sl.registerLazySingleton<AuthRemoteDataSource>(

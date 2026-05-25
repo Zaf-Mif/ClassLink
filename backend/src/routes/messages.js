@@ -1,7 +1,7 @@
 const express = require('express');
 const pool = require('../config/database');
 const auth = require('../middleware/auth');
-const { sendPushToUser } = require('../services/notificationService');
+
 
 const router = express.Router();
 
@@ -75,12 +75,6 @@ router.post('/', auth(), async (req, res) => {
        VALUES ($1, 'message', $2, $3, $4)`,
       [receiverId, message.id, `Message from ${senderName}`, content.substring(0, 200)]
     );
-    sendPushToUser(
-      receiverId,
-      `Message from ${senderName}`,
-      content.substring(0, 200),
-      { type: 'message', referenceId: message.id.toString() }
-    ).catch(() => {});
 
     res.status(201).json({
       id: message.id.toString(),

@@ -1,8 +1,6 @@
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/theme/app_theme.dart';
-import 'core/services/fcm_service.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
@@ -19,10 +17,6 @@ import 'injection/injection_container.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initDependencies();
-  try {
-    await Firebase.initializeApp();
-    await sl<FcmService>().initialize();
-  } catch (_) {}
   runApp(const ClassLinkApp());
 }
 
@@ -76,7 +70,7 @@ class ClassLinkApp extends StatelessWidget {
           '/admin-dashboard': (_) => const AdminDashboardScreen(),
         },
       ),
-    ),
+      ),
     );
   }
 }

@@ -11,7 +11,6 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
     on<LoadNotifications>(_onLoad);
     on<MarkNotificationRead>(_onMarkRead);
     on<MarkAllNotificationsRead>(_onMarkAllRead);
-    on<RegisterFcmToken>(_onRegisterFcmToken);
   }
 
   Future<void> _onLoad(LoadNotifications event, Emitter<NotificationState> emit) async {
@@ -49,12 +48,6 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
         ).toList();
         emit(NotificationLoaded(updated));
       }
-    } catch (_) {}
-  }
-
-  Future<void> _onRegisterFcmToken(RegisterFcmToken event, Emitter<NotificationState> emit) async {
-    try {
-      await _repository.updateFcmToken(event.token);
     } catch (_) {}
   }
 }

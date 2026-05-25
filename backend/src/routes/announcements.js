@@ -1,7 +1,7 @@
 const express = require('express');
 const pool = require('../config/database');
 const auth = require('../middleware/auth');
-const { sendPushToUser, sendPushToCourse } = require('../services/notificationService');
+
 
 const router = express.Router();
 
@@ -123,14 +123,6 @@ router.post('/', auth(['teacher', 'admin']), async (req, res) => {
           [student.id, announcement.id, title, content.substring(0, 200)]
         );
       }
-
-      sendPushToCourse(
-        courseId,
-        `New Announcement: ${title}`,
-        content.substring(0, 200),
-        { type: 'announcement', referenceId: announcement.id.toString() },
-        req.user.id
-      ).catch(() => {});
     }
 
     const teacherResult = await pool.query(

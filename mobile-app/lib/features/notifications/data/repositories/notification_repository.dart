@@ -34,16 +34,6 @@ class NotificationRepository {
     }
   }
 
-  Future<void> updateFcmToken(String token) async {
-    try {
-      await _apiClient.dio.post('/users/fcm-token', data: {
-        'fcmToken': token,
-      });
-    } on DioException catch (e) {
-      throw Exception(_mapError(e));
-    }
-  }
-
   String _mapError(DioException e) {
     if (e.response?.data is Map) {
       return (e.response!.data as Map)['message']?.toString() ?? 'Server error';

@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const pool = require('../config/database');
 const auth = require('../middleware/auth');
-const { sendPushToCourse } = require('../services/notificationService');
+
 
 const router = express.Router();
 
@@ -113,13 +113,6 @@ router.post('/upload', auth(['teacher', 'admin']), upload.single('file'), async 
         [student.id, file.id, `New File: ${title}`, topic ? `Topic: ${topic}` : title]
       );
     }
-    sendPushToCourse(
-      courseId,
-      `New File: ${title}`,
-      topic ? `Topic: ${topic} — ${title}` : title,
-      { type: 'file', referenceId: file.id.toString() },
-      req.user.id
-    ).catch(() => {});
 
     res.status(201).json({
       id: file.id.toString(),
