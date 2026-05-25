@@ -10,6 +10,7 @@ import '../../presentation/bloc/course_bloc.dart';
 import '../../presentation/bloc/course_event.dart';
 import '../../presentation/bloc/course_state.dart';
 import 'course_screen.dart';
+import 'search_screen.dart';
 import '../../../../injection/injection_container.dart';
 
 class StudentHomeScreen extends StatefulWidget {
@@ -502,19 +503,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Widget _buildSearchTab() {
-    return const SafeArea(
-      child: Center(
-        child: Text(
-          'Search\nComing Soon',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 18,
-            color: AppColors.textGrey,
-            fontFamily: 'Poppins',
-          ),
-        ),
-      ),
-    );
+    return const SearchScreen();
   }
 
   Widget _buildProfileTab() {
