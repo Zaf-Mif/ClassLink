@@ -1,45 +1,71 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
+# ==========================================
+# IDE & OS Files
+# ==========================================
+.vscode/
 .idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# ==========================================
+# Backend (Node.js / Express)
+# ==========================================
+backend/node_modules/
+backend/npm-debug.log
+backend/yarn-error.log
+backend/yarn.log
+backend/pnpm-debug.log
 
+# Environment variables (CRITICAL: Never commit secrets)
+backend/.env
+backend/.env.local
+backend/.env.development
+backend/.env.test
+backend/.env.production
+
+# ==========================================
+# Mobile App (Flutter / Dart)
+# ==========================================
 # Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
+mobile-app/.dart_tool/
+mobile-app/.packages
+mobile-app/build/
+mobile-app/.pub-cache/
+mobile-app/.pub/
 
-# Symbolication related
-app.*.symbols
+# Android related
+mobile-app/android/.gradle/
+mobile-app/android/app/src/main/gen/
+mobile-app/android/app/profile/
+mobile-app/android/app/release/
+mobile-app/android/local.properties
+mobile-app/android/key.properties
+mobile-app/**/*.apk
+mobile-app/**/*.aab
+mobile-app/**/*.jks
+mobile-app/**/*.keystore
 
-# Obfuscation related
-app.*.map.json
+# iOS/macOS related
+mobile-app/ios/**/*.pbxuser
+mobile-app/ios/**/*.mode1v3
+mobile-app/ios/**/*.mode2v3
+mobile-app/ios/**/*.pbxbuild
+mobile-app/ios/xcuserdata/
+mobile-app/ios/.generated/
+mobile-app/ios/Flutter/App.framework
+mobile-app/ios/Flutter/Flutter.framework
+mobile-app/ios/Flutter/Flutter.podspec
+mobile-app/ios/Flutter/Generated.xcconfig
+mobile-app/ios/Flutter/app.flx
+mobile-app/ios/Flutter/app.zip
+mobile-app/ios/Flutter/flutter_assets/
+mobile-app/ios/Flutter/flutter_export_environment.sh
+mobile-app/ios/Pods/
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# Web related
+mobile-app/lib/generated_plugin_registrant.dart
+
+# Plugins
+mobile-app/.flutter-plugins
+mobile-app/.flutter-plugins-dependencies
