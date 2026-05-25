@@ -26,6 +26,8 @@ class AuthRemoteDataSource {
           ? (e.response!.data as Map)['message']?.toString() ?? 'Login failed'
           : 'Login failed';
       throw Exception(message);
+    } catch (e) {
+      throw Exception('Login failed: $e');
     }
   }
 
@@ -51,16 +53,24 @@ class AuthRemoteDataSource {
   }
 
   Future<void> _saveToken(String token) async {
-    await _secureStorage.write(key: AppConstants.tokenKey, value: token);
+    try {
+      await _secureStorage.write(key: AppConstants.tokenKey, value: token);
+    } catch (_) {}
   }
 
   Future<String?> getToken() async {
-    return await _secureStorage.read(key: AppConstants.tokenKey);
+    try {
+      return await _secureStorage.read(key: AppConstants.tokenKey);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _saveUser(UserModel user) async {
-    await _secureStorage.write(key: AppConstants.roleKey, value: user.role);
-    await _secureStorage.write(key: AppConstants.userKey, value: user.name);
+    try {
+      await _secureStorage.write(key: AppConstants.roleKey, value: user.role);
+      await _secureStorage.write(key: AppConstants.userKey, value: user.name);
+    } catch (_) {}
   }
 
   Future<String?> getSavedRole() async {

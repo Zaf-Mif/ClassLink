@@ -27,28 +27,40 @@ class ClassLinkApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider<AuthBloc>(
       create: (_) => sl<AuthBloc>()..add(CheckAuthStatus()),
-      child: MaterialApp(
-        title: 'ClassLink',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        home: BlocBuilder<AuthBloc, AuthState>(
-          builder: (context, state) {
-            if (state is AuthLoading || state is AuthInitial) {
-              return const SplashScreen();
-            }
-            if (state is AuthAuthenticated) {
-              switch (state.user.role) {
-                case 'student':
-                  return StudentHomeScreen(user: state.user);
-                case 'teacher':
-                  return TeacherHomeScreen(user: state.user);
-                case 'admin':
-                  return const AdminDashboardScreen();
+      child: BlocListener<AuthBloc, AuthState>(
+        listener: (context, state) {
+          if (state is AuthError) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        },
+        child: MaterialApp(
+          title: 'ClassLink',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          home: BlocBuilder<AuthBloc, AuthState>(
+            builder: (context, state) {
+              if (state is AuthLoading || state is AuthInitial) {
+                return const SplashScreen();
               }
-            }
-            return const LoginScreen();
-          },
-        ),
+              if (state is AuthAuthenticated) {
+                switch (state.user.role) {
+                  case 'student':
+                    return StudentHomeScreen(user: state.user);
+                  case 'teacher':
+                    return TeacherHomeScreen(user: state.user);
+                  case 'admin':
+                    return const AdminDashboardScreen();
+                }
+              }
+              return const LoginScreen();
+            },
+          ),
         routes: {
           '/login': (_) => const LoginScreen(),
           '/splash': (_) => const SplashScreen(),
@@ -58,6 +70,7 @@ class ClassLinkApp extends StatelessWidget {
           '/admin-dashboard': (_) => const AdminDashboardScreen(),
         },
       ),
+    ),
     );
   }
 }
