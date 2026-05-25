@@ -5,6 +5,7 @@ class AnnouncementModel {
   final String teacherName;
   final DateTime createdAt;
   final bool isRead;
+  final DateTime? scheduledAt;
 
   const AnnouncementModel({
     required this.id,
@@ -13,6 +14,7 @@ class AnnouncementModel {
     required this.teacherName,
     required this.createdAt,
     this.isRead = false,
+    this.scheduledAt,
   });
 
   factory AnnouncementModel.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,27 @@ class AnnouncementModel {
       teacherName: json['teacherName'] ?? '',
       createdAt: DateTime.parse(json['createdAt']),
       isRead: json['isRead'] ?? false,
+      scheduledAt: json['scheduledAt'] != null ? DateTime.parse(json['scheduledAt']) : null,
+    );
+  }
+
+  AnnouncementModel copyWith({
+    String? id,
+    String? title,
+    String? content,
+    String? teacherName,
+    DateTime? createdAt,
+    bool? isRead,
+    DateTime? scheduledAt,
+  }) {
+    return AnnouncementModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      teacherName: teacherName ?? this.teacherName,
+      createdAt: createdAt ?? this.createdAt,
+      isRead: isRead ?? this.isRead,
+      scheduledAt: scheduledAt ?? this.scheduledAt,
     );
   }
 }

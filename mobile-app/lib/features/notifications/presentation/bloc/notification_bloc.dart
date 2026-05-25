@@ -10,6 +10,8 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
   NotificationBloc(this._repository) : super(NotificationInitial()) {
     on<LoadNotifications>(_onLoad);
     on<MarkNotificationRead>(_onMarkRead);
+    on<MarkAllNotificationsRead>(_onMarkAllRead);
+    on<RegisterFcmToken>(_onRegisterFcmToken);
   }
 
   Future<void> _onLoad(LoadNotifications event, Emitter<NotificationState> emit) async {
@@ -29,11 +31,30 @@ class NotificationBloc extends Bloc<NotificationEvent, NotificationState> {
         final current = (state as NotificationLoaded).notifications;
         final updated = current.map((n) =>
           n.id == event.notificationId
-              ? NotificationModel(id: n.id, userId: n.userId, type: n.type, referenceId: n.referenceId, isRead: true, createdAt: n.createdAt)
+              ? NotificationModel(id: n.id, userId: n.userId, type: n.type, referenceId: n.referenceId, title: n.title, message: n.message, isRead: true, createdAt: n.createdAt)
               : n
         ).toList();
         emit(NotificationLoaded(updated));
       }
+    } catch (_) {}
+  }
+
+  Future<void> _onMarkAllRead(MarkAllNotificationsRead event, Emitter<NotificationState> emit) async {
+    try {
+      await _repository.markAllAsRead();
+      if (state is NotificationLoaded) {
+        final current = (state as NotificationLoaded).notifications;
+        final updated = current.map((n) =>
+          NotificationModel(id: n.id, userId: n.userId, type: n.type, referenceId: n.referenceId, title: n.title, message: n.message, isRead: true, createdAt: n.createdAt)
+        ).toList();
+        emit(NotificationLoaded(updated));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _onRegisterFcmToken(RegisterFcmToken event, Emitter<NotificationState> emit) async {
+    try {
+      await _repository.updateFcmToken(event.token);
     } catch (_) {}
   }
 }

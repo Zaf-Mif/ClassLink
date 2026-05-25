@@ -21,6 +21,8 @@ router.get('/', auth(), async (req, res) => {
       userId: n.user_id.toString(),
       type: n.type,
       referenceId: n.reference_id ? n.reference_id.toString() : null,
+      title: n.title || '',
+      message: n.message || '',
       isRead: n.is_read,
       createdAt: n.created_at,
     }));
@@ -52,6 +54,20 @@ router.put('/:id/read', auth(), async (req, res) => {
     res.json({ message: 'Notification marked as read.' });
   } catch (err) {
     console.error('Mark notification read error:', err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+router.put('/read-all', auth(), async (req, res) => {
+  try {
+    await pool.query(
+      `UPDATE notifications SET is_read = true
+       WHERE user_id = $1 AND is_read = false`,
+      [req.user.id]
+    );
+    res.json({ message: 'All notifications marked as read.' });
+  } catch (err) {
+    console.error('Mark all read error:', err);
     res.status(500).json({ message: 'Internal server error.' });
   }
 });

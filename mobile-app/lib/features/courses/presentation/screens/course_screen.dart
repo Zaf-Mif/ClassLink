@@ -16,6 +16,7 @@ import '../../../announcements/presentation/bloc/announcement_state.dart';
 import '../../../assignments/presentation/bloc/assignment_bloc.dart';
 import '../../../assignments/presentation/bloc/assignment_event.dart';
 import '../../../assignments/presentation/bloc/assignment_state.dart';
+import '../../../forum/data/models/forum_question_model.dart';
 import '../../../forum/presentation/bloc/forum_bloc.dart';
 import '../../../forum/presentation/bloc/forum_event.dart';
 import '../../../forum/presentation/bloc/forum_state.dart';
@@ -1143,7 +1144,9 @@ class _CourseScreenState extends State<CourseScreen>
                     final firstAnswer = q.answers.isNotEmpty
                         ? q.answers.first
                         : null;
-                    return Container(
+                    return GestureDetector(
+                      onTap: () => _showQuestionDetail(context, q),
+                      child: Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
                         color: AppColors.card,
@@ -1258,11 +1261,14 @@ class _CourseScreenState extends State<CourseScreen>
                                   left: 14, right: 14, bottom: 14),
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.05),
+                                color: firstAnswer.isPinned
+                                    ? AppColors.accent.withOpacity(0.08)
+                                    : AppColors.primary.withOpacity(0.05),
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                  color:
-                                      AppColors.primary.withOpacity(0.2),
+                                  color: firstAnswer.isPinned
+                                      ? AppColors.accent.withOpacity(0.4)
+                                      : AppColors.primary.withOpacity(0.2),
                                 ),
                               ),
                               child: Row(
@@ -1272,11 +1278,15 @@ class _CourseScreenState extends State<CourseScreen>
                                     width: 28,
                                     height: 28,
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary,
+                                      color: firstAnswer.isPinned
+                                          ? AppColors.accent
+                                          : AppColors.primary,
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: const Icon(
-                                      Icons.school_rounded,
+                                    child: Icon(
+                                      firstAnswer.isPinned
+                                          ? Icons.push_pin_rounded
+                                          : Icons.school_rounded,
                                       color: Colors.white,
                                       size: 16,
                                     ),
@@ -1311,6 +1321,7 @@ class _CourseScreenState extends State<CourseScreen>
                             ),
                         ],
                       ),
+                    ),
                     );
                   },
                 ),
@@ -1334,6 +1345,230 @@ class _CourseScreenState extends State<CourseScreen>
           }
           return const SizedBox();
         },
+      ),
+    );
+  }
+
+  void _showQuestionDetail(BuildContext context, ForumQuestionModel q) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        height: MediaQuery.of(context).size.height * 0.75,
+        decoration: const BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.divider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.person_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        q.studentName,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatTime(q.createdAt),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textGrey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: (q.isAnswered
+                            ? AppColors.success
+                            : AppColors.accent)
+                        .withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    q.isAnswered ? 'Answered' : 'Pending',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: q.isAnswered
+                          ? AppColors.success
+                          : AppColors.accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(color: AppColors.divider, height: 1),
+            const SizedBox(height: 16),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      q.content,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: AppColors.textDark,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    if (q.answers.isNotEmpty) ...[
+                      const Text(
+                        'Answers',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...q.answers.map((a) => Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: a.isPinned
+                              ? AppColors.accent.withOpacity(0.08)
+                              : AppColors.primary.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: a.isPinned
+                                ? AppColors.accent.withOpacity(0.4)
+                                : AppColors.primary.withOpacity(0.15),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  a.isPinned
+                                      ? Icons.push_pin_rounded
+                                      : Icons.school_rounded,
+                                  size: 16,
+                                  color: a.isPinned
+                                      ? AppColors.accent
+                                      : AppColors.primary,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  a.teacherName,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: a.isPinned
+                                        ? AppColors.accent
+                                        : AppColors.primary,
+                                  ),
+                                ),
+                                if (a.isPinned) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accent.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Text(
+                                      'Pinned',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: AppColors.accent,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const Spacer(),
+                                Text(
+                                  _formatTime(a.createdAt),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textGrey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              a.content,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: AppColors.textDark,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                    ],
+                    if (q.answers.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: const Center(
+                          child: Text(
+                            'No answers yet. Check back later.',
+                            style: TextStyle(
+                              color: AppColors.textGrey,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

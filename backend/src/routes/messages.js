@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/database');
 const auth = require('../middleware/auth');
+const { sendPushToUser } = require('../services/notificationService');
 
 const router = express.Router();
 
@@ -67,11 +68,19 @@ router.post('/', auth(), async (req, res) => {
       [req.user.id]
     );
 
+    const senderName = userResult.rows[0]?.name || 'Unknown';
+
     await pool.query(
-      `INSERT INTO notifications (user_id, type, reference_id)
-       VALUES ($1, 'message', $2)`,
-      [receiverId, message.id]
+      `INSERT INTO notifications (user_id, type, reference_id, title, message)
+       VALUES ($1, 'message', $2, $3, $4)`,
+      [receiverId, message.id, `Message from ${senderName}`, content.substring(0, 200)]
     );
+    sendPushToUser(
+      receiverId,
+      `Message from ${senderName}`,
+      content.substring(0, 200),
+      { type: 'message', referenceId: message.id.toString() }
+    ).catch(() => {});
 
     res.status(201).json({
       id: message.id.toString(),

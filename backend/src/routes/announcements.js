@@ -1,14 +1,18 @@
 const express = require('express');
 const pool = require('../config/database');
 const auth = require('../middleware/auth');
+const { sendPushToUser, sendPushToCourse } = require('../services/notificationService');
 
 const router = express.Router();
 
+// GET /:courseId — Get announcements for a course
+// Supports ?q=keyword for text search
 router.get('/:courseId', auth(), async (req, res) => {
   try {
     const { courseId } = req.params;
     const userId = req.user.id;
     const role = req.user.role;
+    const searchQ = req.query.q;
 
     let query;
     let params;
@@ -19,20 +23,39 @@ router.get('/:courseId', auth(), async (req, res) => {
         FROM announcements a
         JOIN users u ON u.id = a.teacher_id
         WHERE a.course_id = $1
-        ORDER BY a.created_at DESC
       `;
       params = [courseId];
+
+      if (searchQ) {
+        query += ` AND (a.title ILIKE $2 OR a.content ILIKE $2)`;
+        params.push(`%${searchQ}%`);
+      }
+
+      query += ` ORDER BY a.created_at DESC`;
     } else {
+      // Students see only announcements that:
+      // 1. Have scheduled_at <= NOW() OR scheduled_at IS NULL
+      // 2. Target their section (via announcement_targets)
       query = `
         SELECT a.*, u.name AS teacher_name,
                CASE WHEN ar.id IS NOT NULL THEN true ELSE false END AS is_read
         FROM announcements a
         JOIN users u ON u.id = a.teacher_id
+        JOIN course_teacher_section cts ON cts.course_id = a.course_id
+        JOIN announcement_targets atgt ON atgt.announcement_id = a.id
         LEFT JOIN announcement_reads ar ON ar.announcement_id = a.id AND ar.student_id = $2
         WHERE a.course_id = $1
-        ORDER BY a.created_at DESC
+          AND (a.scheduled_at IS NULL OR a.scheduled_at <= NOW())
+          AND atgt.section_id = (SELECT section_id FROM users WHERE id = $2)
       `;
       params = [courseId, userId];
+
+      if (searchQ) {
+        query += ` AND (a.title ILIKE $3 OR a.content ILIKE $3)`;
+        params.push(`%${searchQ}%`);
+      }
+
+      query += ` ORDER BY a.created_at DESC`;
     }
 
     const result = await pool.query(query, params);
@@ -54,23 +77,25 @@ router.get('/:courseId', auth(), async (req, res) => {
   }
 });
 
+// POST / — Create announcement (teacher/admin only)
 router.post('/', auth(['teacher', 'admin']), async (req, res) => {
   try {
-    const { title, content, courseId, sectionIds } = req.body;
+    const { title, content, courseId, sectionIds, scheduledAt } = req.body;
 
     if (!title || !content || !courseId) {
       return res.status(400).json({ message: 'Title, content, and courseId are required.' });
     }
 
     const result = await pool.query(
-      `INSERT INTO announcements (title, content, teacher_id, course_id)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO announcements (title, content, teacher_id, course_id, scheduled_at)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [title, content, req.user.id, courseId]
+      [title, content, req.user.id, courseId, scheduledAt || null]
     );
 
     const announcement = result.rows[0];
 
+    // Insert into announcement_targets if sectionIds provided
     if (sectionIds && Array.isArray(sectionIds) && sectionIds.length > 0) {
       const values = sectionIds.map((sectionId) =>
         pool.query(
@@ -81,21 +106,31 @@ router.post('/', auth(['teacher', 'admin']), async (req, res) => {
       await Promise.all(values);
     }
 
-    const studentsResult = await pool.query(
-      `SELECT id FROM users
-       WHERE section_id IN (
-         SELECT section_id FROM course_teacher_section WHERE course_id = $1
-       )
-       AND role = 'student'`,
-      [courseId]
-    );
-
-    for (const student of studentsResult.rows) {
-      await pool.query(
-        `INSERT INTO notifications (user_id, type, reference_id)
-         VALUES ($1, 'announcement', $2)`,
-        [student.id, announcement.id]
+    // Create notifications for students in targeted sections
+    // Only send notifications for non-scheduled (immediate) announcements
+    if (!scheduledAt) {
+      const studentsResult = await pool.query(
+        `SELECT DISTINCT u.id FROM users u
+         JOIN course_teacher_section cts ON cts.section_id = u.section_id
+         WHERE cts.course_id = $1 AND u.role = 'student'`,
+        [courseId]
       );
+
+      for (const student of studentsResult.rows) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, type, reference_id, title, message)
+           VALUES ($1, 'announcement', $2, $3, $4)`,
+          [student.id, announcement.id, title, content.substring(0, 200)]
+        );
+      }
+
+      sendPushToCourse(
+        courseId,
+        `New Announcement: ${title}`,
+        content.substring(0, 200),
+        { type: 'announcement', referenceId: announcement.id.toString() },
+        req.user.id
+      ).catch(() => {});
     }
 
     const teacherResult = await pool.query(
@@ -110,6 +145,7 @@ router.post('/', auth(['teacher', 'admin']), async (req, res) => {
       teacherName: teacherResult.rows[0]?.name || 'Unknown',
       createdAt: announcement.created_at,
       isRead: false,
+      scheduledAt: announcement.scheduled_at || null,
     });
   } catch (err) {
     console.error('Create announcement error:', err);
@@ -117,6 +153,7 @@ router.post('/', auth(['teacher', 'admin']), async (req, res) => {
   }
 });
 
+// POST /:id/read — Mark announcement as read (student only)
 router.post('/:id/read', auth(['student']), async (req, res) => {
   try {
     const { id } = req.params;
@@ -124,8 +161,10 @@ router.post('/:id/read', auth(['student']), async (req, res) => {
 
     await pool.query(
       `INSERT INTO announcement_reads (announcement_id, student_id)
-       VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
+       SELECT $1, $2
+       WHERE NOT EXISTS (
+         SELECT 1 FROM announcement_reads WHERE announcement_id = $1 AND student_id = $2
+       )`,
       [id, userId]
     );
 
@@ -136,6 +175,7 @@ router.post('/:id/read', auth(['student']), async (req, res) => {
   }
 });
 
+// GET /:id/reads — Get read receipts (teacher/admin only)
 router.get('/:id/reads', auth(['teacher', 'admin']), async (req, res) => {
   try {
     const { id } = req.params;

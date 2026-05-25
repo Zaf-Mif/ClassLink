@@ -7,9 +7,16 @@ class AnnouncementRepository {
 
   AnnouncementRepository(this._apiClient);
 
-  Future<List<AnnouncementModel>> getAnnouncements(String courseId) async {
+  Future<List<AnnouncementModel>> getAnnouncements(String courseId, {String? query}) async {
     try {
-      final response = await _apiClient.dio.get('/announcements/$courseId');
+      final params = <String, dynamic>{};
+      if (query != null && query.isNotEmpty) {
+        params['q'] = query;
+      }
+      final response = await _apiClient.dio.get(
+        '/announcements/$courseId',
+        queryParameters: params.isNotEmpty ? params : null,
+      );
       return (response.data as List)
           .map((json) => AnnouncementModel.fromJson(json as Map<String, dynamic>))
           .toList();
@@ -23,17 +30,21 @@ class AnnouncementRepository {
     required String content,
     required String courseId,
     List<String>? sectionIds,
+    DateTime? scheduledAt,
   }) async {
     try {
-      final response = await _apiClient.dio.post(
-        '/announcements',
-        data: {
-          'title': title,
-          'content': content,
-          'courseId': courseId,
-          if (sectionIds != null && sectionIds.isNotEmpty) 'sectionIds': sectionIds,
-        },
-      );
+      final body = <String, dynamic>{
+        'title': title,
+        'content': content,
+        'courseId': courseId,
+      };
+      if (sectionIds != null && sectionIds.isNotEmpty) {
+        body['sectionIds'] = sectionIds;
+      }
+      if (scheduledAt != null) {
+        body['scheduledAt'] = scheduledAt.toIso8601String();
+      }
+      final response = await _apiClient.dio.post('/announcements', data: body);
       return AnnouncementModel.fromJson(response.data);
     } on DioException catch (e) {
       throw Exception(_mapError(e));

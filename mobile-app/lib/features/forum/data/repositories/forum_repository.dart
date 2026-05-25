@@ -30,12 +30,28 @@ class ForumRepository {
     }
   }
 
-  Future<void> answerQuestion(String questionId, String content) async {
+  Future<void> answerQuestion(String questionId, String content, {bool isPinned = false}) async {
     try {
       await _apiClient.dio.post(
         '/forum/questions/$questionId/answers',
-        data: {'content': content},
+        data: {'content': content, 'isPinned': isPinned},
       );
+    } on DioException catch (e) {
+      throw Exception(_mapError(e));
+    }
+  }
+
+  Future<void> pinAnswer(String questionId, String answerId) async {
+    try {
+      await _apiClient.dio.patch('/forum/questions/$questionId/answers/$answerId/pin');
+    } on DioException catch (e) {
+      throw Exception(_mapError(e));
+    }
+  }
+
+  Future<void> toggleAnswered(String questionId) async {
+    try {
+      await _apiClient.dio.patch('/forum/questions/$questionId/toggle-answered');
     } on DioException catch (e) {
       throw Exception(_mapError(e));
     }

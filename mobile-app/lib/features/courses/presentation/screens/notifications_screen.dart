@@ -21,14 +21,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   void _markAllAsRead() {
-    final state = context.read<NotificationBloc>().state;
-    if (state is NotificationLoaded) {
-      for (final n in state.notifications) {
-        if (!n.isRead) {
-          context.read<NotificationBloc>().add(MarkNotificationRead(n.id));
-        }
-      }
-    }
+    context.read<NotificationBloc>().add(MarkAllNotificationsRead());
   }
 
   IconData _iconForType(String type) {
@@ -37,7 +30,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'assignment': return Icons.assignment_rounded;
       case 'file': return Icons.upload_file_rounded;
       case 'message': return Icons.chat_bubble_rounded;
-      case 'qa_answer': return Icons.check_circle_rounded;
+      case 'forum': return Icons.help_outline_rounded;
+      case 'answer': return Icons.check_circle_rounded;
       default: return Icons.notifications_rounded;
     }
   }
@@ -48,8 +42,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'assignment': return AppColors.accent;
       case 'file': return AppColors.success;
       case 'message': return AppColors.primary;
-      case 'qa_answer': return AppColors.success;
+      case 'forum': return AppColors.accent;
+      case 'answer': return AppColors.success;
       default: return AppColors.textGrey;
+    }
+  }
+
+  String _typeLabel(String type) {
+    switch (type) {
+      case 'announcement': return 'Announcement';
+      case 'assignment': return 'Assignment';
+      case 'file': return 'File';
+      case 'message': return 'Message';
+      case 'forum': return 'Question';
+      case 'answer': return 'Answer';
+      default: return type;
     }
   }
 
@@ -130,9 +137,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               itemBuilder: (context, index) {
                 final n = notifications[index];
                 final iconColor = _colorForType(n.type);
+                final displayTitle = n.title.isNotEmpty ? n.title : _typeLabel(n.type);
+                final displayMessage = n.message.isNotEmpty ? n.message : '';
                 return _NotificationTile(
-                  title: n.type,
-                  subtitle: n.referenceId ?? '',
+                  title: displayTitle,
+                  subtitle: displayMessage,
+                  typeLabel: _typeLabel(n.type),
                   timeAgo: _timeAgo(n.createdAt),
                   isRead: n.isRead,
                   iconBg: iconColor.withValues(alpha: 0.12),
@@ -157,6 +167,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 class _NotificationTile extends StatelessWidget {
   final String title;
   final String subtitle;
+  final String typeLabel;
   final String timeAgo;
   final bool isRead;
   final Color iconBg;
@@ -167,6 +178,7 @@ class _NotificationTile extends StatelessWidget {
   const _NotificationTile({
     required this.title,
     required this.subtitle,
+    required this.typeLabel,
     required this.timeAgo,
     required this.isRead,
     required this.iconBg,
@@ -225,12 +237,25 @@ class _NotificationTile extends StatelessWidget {
                         fontFamily: 'Poppins',
                       ),
                     ),
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textGrey,
+                          fontFamily: 'Poppins',
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
-                      subtitle,
+                      typeLabel,
                       style: const TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textGrey,
+                        fontSize: 11,
+                        color: AppColors.textLight,
                         fontFamily: 'Poppins',
                       ),
                     ),

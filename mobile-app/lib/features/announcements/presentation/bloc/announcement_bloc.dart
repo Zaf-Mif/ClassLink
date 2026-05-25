@@ -1,6 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/repositories/announcement_repository.dart';
-import '../../data/models/announcement_model.dart';
+import '../../data/models/read_receipt_model.dart';
 import 'announcement_event.dart';
 import 'announcement_state.dart';
 
@@ -11,6 +11,7 @@ class AnnouncementBloc extends Bloc<AnnouncementEvent, AnnouncementState> {
     on<LoadAnnouncements>(_onLoadAnnouncements);
     on<MarkAnnouncementRead>(_onMarkRead);
     on<CreateAnnouncement>(_onCreate);
+    on<LoadReadStats>(_onLoadReadStats);
   }
 
   Future<void> _onLoadAnnouncements(
@@ -19,7 +20,10 @@ class AnnouncementBloc extends Bloc<AnnouncementEvent, AnnouncementState> {
   ) async {
     emit(AnnouncementLoading());
     try {
-      final announcements = await _repository.getAnnouncements(event.courseId);
+      final announcements = await _repository.getAnnouncements(
+        event.courseId,
+        query: event.query,
+      );
       emit(AnnouncementLoaded(announcements));
     } catch (e) {
       emit(AnnouncementError(e.toString().replaceAll('Exception: ', '')));
@@ -36,14 +40,7 @@ class AnnouncementBloc extends Bloc<AnnouncementEvent, AnnouncementState> {
         final current = (state as AnnouncementLoaded).announcements;
         final updated = current.map((a) {
           if (a.id == event.announcementId) {
-            return AnnouncementModel(
-              id: a.id,
-              title: a.title,
-              content: a.content,
-              teacherName: a.teacherName,
-              createdAt: a.createdAt,
-              isRead: true,
-            );
+            return a.copyWith(isRead: true);
           }
           return a;
         }).toList();
@@ -62,12 +59,30 @@ class AnnouncementBloc extends Bloc<AnnouncementEvent, AnnouncementState> {
         content: event.content,
         courseId: event.courseId,
         sectionIds: event.sectionIds,
+        scheduledAt: event.scheduledAt,
       );
       emit(AnnouncementCreated(announcement));
-      // Reload after creation
       add(LoadAnnouncements(event.courseId));
     } catch (e) {
       emit(AnnouncementError(e.toString().replaceAll('Exception: ', '')));
     }
+  }
+
+  Future<void> _onLoadReadStats(
+    LoadReadStats event,
+    Emitter<AnnouncementState> emit,
+  ) async {
+    try {
+      final data = await _repository.getReadReceipts(event.announcementId);
+      final reads = (data['reads'] as List)
+          .map((json) => ReadReceiptModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+      emit(AnnouncementReadStatsLoaded(
+        announcementId: event.announcementId,
+        readCount: reads.length,
+        totalCount: data['total'] as int,
+        receipts: reads,
+      ));
+    } catch (_) {}
   }
 }

@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
   year INTEGER,
   semester INTEGER,
   section_id INTEGER REFERENCES sections(id),
+  fcm_token VARCHAR(500),
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -145,9 +146,28 @@ CREATE TABLE IF NOT EXISTS notifications (
   user_id INTEGER REFERENCES users(id),
   type VARCHAR(100) NOT NULL,
   reference_id INTEGER,
+  title VARCHAR(255),
+  message TEXT,
   is_read BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- System activity logs (admin audit trail)
+CREATE TABLE IF NOT EXISTS system_activity_logs (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id),
+  action VARCHAR(100) NOT NULL,
+  entity_type VARCHAR(100),
+  entity_id INTEGER,
+  details JSONB,
+  ip_address VARCHAR(45),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- FCM token index for push notification lookups
+CREATE INDEX IF NOT EXISTS idx_users_fcm_token ON users(fcm_token) WHERE fcm_token IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_user ON system_activity_logs(user_id);
 
 -- Seed data: departments
 INSERT INTO departments (name) VALUES

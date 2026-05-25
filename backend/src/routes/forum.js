@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../config/database');
 const auth = require('../middleware/auth');
+const { sendPushToUser } = require('../services/notificationService');
 
 const router = express.Router();
 
@@ -71,12 +72,20 @@ router.post('/:courseId/questions', auth(['student']), async (req, res) => {
       [courseId]
     );
 
+    const questionTitle = content.substring(0, 100);
+
     for (const teacher of teachersResult.rows) {
       await pool.query(
-        `INSERT INTO notifications (user_id, type, reference_id)
-         VALUES ($1, 'forum', $2)`,
-        [teacher.teacher_id, question.id]
+        `INSERT INTO notifications (user_id, type, reference_id, title, message)
+         VALUES ($1, 'forum', $2, $3, $4)`,
+        [teacher.teacher_id, question.id, `New Question`, questionTitle]
       );
+      sendPushToUser(
+        teacher.teacher_id,
+        `New Question in Course`,
+        questionTitle,
+        { type: 'forum', referenceId: question.id.toString() }
+      ).catch(() => {});
     }
 
     res.status(201).json({
@@ -96,7 +105,7 @@ router.post('/:courseId/questions', auth(['student']), async (req, res) => {
 router.post('/questions/:id/answers', auth(['teacher', 'admin']), async (req, res) => {
   try {
     const { id } = req.params;
-    const { content } = req.body;
+    const { content, isPinned } = req.body;
 
     if (!content) {
       return res.status(400).json({ message: 'Content is required.' });
@@ -112,10 +121,10 @@ router.post('/questions/:id/answers', auth(['teacher', 'admin']), async (req, re
     }
 
     const result = await pool.query(
-      `INSERT INTO forum_answers (question_id, teacher_id, content)
-       VALUES ($1, $2, $3)
+      `INSERT INTO forum_answers (question_id, teacher_id, content, is_pinned)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [id, req.user.id, content]
+      [id, req.user.id, content, isPinned || false]
     );
 
     await pool.query(
@@ -131,21 +140,96 @@ router.post('/questions/:id/answers', auth(['teacher', 'admin']), async (req, re
 
     const question = questionResult.rows[0];
 
+    const answerSnippet = content.substring(0, 200);
+
     await pool.query(
-      `INSERT INTO notifications (user_id, type, reference_id)
-       VALUES ($1, 'answer', $2)`,
-      [question.student_id, id]
+      `INSERT INTO notifications (user_id, type, reference_id, title, message)
+       VALUES ($1, 'answer', $2, $3, $4)`,
+      [question.student_id, id, `Your Question Answered`, answerSnippet]
     );
+    sendPushToUser(
+      question.student_id,
+      `Your Question Answered`,
+      answerSnippet,
+      { type: 'answer', referenceId: id.toString() }
+    ).catch(() => {});
 
     res.status(201).json({
       id: answer.id.toString(),
       content: answer.content,
       teacherName: teacherResult.rows[0]?.name || 'Unknown',
-      isPinned: false,
+      isPinned: answer.is_pinned,
       createdAt: answer.created_at,
     });
   } catch (err) {
     console.error('Create answer error:', err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// PATCH /questions/:qId/answers/:aId/pin — Toggle pin status (teacher/admin only)
+router.patch('/questions/:qId/answers/:aId/pin', auth(['teacher', 'admin']), async (req, res) => {
+  try {
+    const { aId } = req.params;
+
+    const answerResult = await pool.query(
+      'SELECT * FROM forum_answers WHERE id = $1',
+      [aId]
+    );
+
+    if (answerResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Answer not found.' });
+    }
+
+    const currentPinned = answerResult.rows[0].is_pinned;
+    const result = await pool.query(
+      'UPDATE forum_answers SET is_pinned = $1 WHERE id = $2 RETURNING *',
+      [!currentPinned, aId]
+    );
+
+    const answer = result.rows[0];
+
+    res.json({
+      id: answer.id.toString(),
+      content: answer.content,
+      teacherName: answer.teacher_name,
+      isPinned: answer.is_pinned,
+      createdAt: answer.created_at,
+    });
+  } catch (err) {
+    console.error('Toggle pin error:', err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+// PATCH /questions/:id/toggle-answered — Toggle is_answered flag (teacher/admin only)
+router.patch('/questions/:id/toggle-answered', auth(['teacher', 'admin']), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const questionResult = await pool.query(
+      'SELECT * FROM forum_questions WHERE id = $1',
+      [id]
+    );
+
+    if (questionResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Question not found.' });
+    }
+
+    const currentAnswered = questionResult.rows[0].is_answered;
+    const result = await pool.query(
+      'UPDATE forum_questions SET is_answered = $1 WHERE id = $2 RETURNING *',
+      [!currentAnswered, id]
+    );
+
+    const question = result.rows[0];
+
+    res.json({
+      id: question.id.toString(),
+      isAnswered: question.is_answered,
+    });
+  } catch (err) {
+    console.error('Toggle answered error:', err);
     res.status(500).json({ message: 'Internal server error.' });
   }
 });

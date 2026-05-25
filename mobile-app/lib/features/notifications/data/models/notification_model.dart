@@ -3,6 +3,8 @@ class NotificationModel {
   final String userId;
   final String type;
   final String? referenceId;
+  final String title;
+  final String message;
   final bool isRead;
   final DateTime createdAt;
 
@@ -11,6 +13,8 @@ class NotificationModel {
     required this.userId,
     required this.type,
     this.referenceId,
+    this.title = '',
+    this.message = '',
     this.isRead = false,
     required this.createdAt,
   });
@@ -21,6 +25,8 @@ class NotificationModel {
       userId: json['userId']?.toString() ?? '',
       type: json['type'] ?? '',
       referenceId: json['referenceId']?.toString(),
+      title: json['title']?.toString() ?? '',
+      message: json['message']?.toString() ?? '',
       isRead: json['isRead'] ?? false,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'].toString())
@@ -34,8 +40,32 @@ class NotificationModel {
       'userId': userId,
       'type': type,
       'referenceId': referenceId,
+      'title': title,
+      'message': message,
       'isRead': isRead,
       'createdAt': createdAt.toIso8601String(),
     };
+  }
+
+  NotificationModel copyWith({
+    String? id,
+    String? userId,
+    String? type,
+    String? referenceId,
+    String? title,
+    String? message,
+    bool? isRead,
+    DateTime? createdAt,
+  }) {
+    return NotificationModel(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      type: type ?? this.type,
+      referenceId: referenceId ?? this.referenceId,
+      title: title ?? this.title,
+      message: message ?? this.message,
+      isRead: isRead ?? this.isRead,
+      createdAt: createdAt ?? this.createdAt,
+    );
   }
 }

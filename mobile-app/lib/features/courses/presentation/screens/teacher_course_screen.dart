@@ -4,6 +4,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../data/models/course_model.dart';
 import '../../../assignments/data/models/assignment_model.dart';
 import '../../../announcements/data/models/announcement_model.dart';
+import '../../../announcements/data/repositories/announcement_repository.dart';
 import '../../../announcements/presentation/bloc/announcement_bloc.dart';
 import '../../../announcements/presentation/bloc/announcement_event.dart';
 import '../../../announcements/presentation/bloc/announcement_state.dart';
@@ -33,6 +34,12 @@ class TeacherCourseScreen extends StatefulWidget {
   State<TeacherCourseScreen> createState() => _TeacherCourseScreenState();
 }
 
+class _ReadStats {
+  final int readCount;
+  final int totalCount;
+  _ReadStats(this.readCount, this.totalCount);
+}
+
 class _TeacherCourseScreenState extends State<TeacherCourseScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
@@ -40,6 +47,10 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
   late final AssignmentBloc _assignmentBloc;
   late final FileBloc _fileBloc;
   late final ForumBloc _forumBloc;
+  final AnnouncementRepository _announcementRepo = sl<AnnouncementRepository>();
+  final TextEditingController _searchController = TextEditingController();
+  final Map<String, _ReadStats> _readStats = {};
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -56,10 +67,36 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
   }
 
   Future<void> _onRefresh() async {
-    _announcementBloc.add(LoadAnnouncements(widget.course.id));
+    _announcementBloc.add(LoadAnnouncements(widget.course.id, query: _searchQuery));
     _assignmentBloc.add(RefreshAssignments(widget.course.id));
     _fileBloc.add(RefreshFiles(widget.course.id));
     _forumBloc.add(LoadQuestions(widget.course.id));
+  }
+
+  Future<void> _loadReadStats(String announcementId) async {
+    try {
+      final data = await _announcementRepo.getReadReceipts(announcementId);
+      final reads = (data['reads'] as List).length;
+      final total = data['total'] as int;
+      if (mounted) {
+        setState(() {
+          _readStats[announcementId] = _ReadStats(reads, total);
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadAllReadStats(List<AnnouncementModel> announcements) async {
+    for (final a in announcements) {
+      if (!_readStats.containsKey(a.id)) {
+        _loadReadStats(a.id);
+      }
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    _searchQuery = value;
+    _announcementBloc.add(LoadAnnouncements(widget.course.id, query: value));
   }
 
   String _formatTime(DateTime dateTime) {
@@ -73,6 +110,7 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
   @override
   void dispose() {
     _tabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -142,133 +180,192 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
   }
 
   Widget _buildAnnouncementsTab() {
-    return BlocBuilder<AnnouncementBloc, AnnouncementState>(
-      builder: (context, state) {
-        if (state is AnnouncementLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (state is AnnouncementError) {
-          return Center(child: Text(state.message));
-        }
-        final announcements = state is AnnouncementLoaded
-            ? state.announcements
-            : <AnnouncementModel>[];
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: announcements.length,
-          itemBuilder: (context, index) {
-            final a = announcements[index];
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.shadow,
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search announcements...',
+              prefixIcon: const Icon(Icons.search, color: AppColors.textGrey),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.divider),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.divider),
+              ),
+              filled: true,
+              fillColor: AppColors.card,
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                      },
+                    )
+                  : null,
+            ),
+            onChanged: _onSearchChanged,
+          ),
+        ),
+        Expanded(
+          child: BlocListener<AnnouncementBloc, AnnouncementState>(
+            listener: (context, state) {
+              if (state is AnnouncementLoaded) {
+                _loadAllReadStats(state.announcements);
+              }
+            },
+            child: BlocBuilder<AnnouncementBloc, AnnouncementState>(
+              builder: (context, state) {
+                if (state is AnnouncementLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (state is AnnouncementError) {
+                  return Center(child: Text(state.message));
+                }
+                final announcements = state is AnnouncementLoaded
+                    ? state.announcements
+                    : <AnnouncementModel>[];
+                if (announcements.isEmpty) {
+                  return ListView(
+                    children: const [
+                      SizedBox(height: 80),
+                      Center(
                         child: Text(
-                          a.title,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textDark,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'All Sections',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w500,
-                          ),
+                          'No announcements yet',
+                          style: TextStyle(color: AppColors.textGrey),
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    a.content,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textGrey,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.remove_red_eye_outlined,
-                        size: 14,
-                        color: AppColors.textGrey,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '0 read',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textGrey,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: 0,
-                            backgroundColor: AppColors.divider,
-                            color: AppColors.success,
-                            minHeight: 6,
+                  );
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: announcements.length,
+                  itemBuilder: (context, index) {
+                    final a = announcements[index];
+                    final stats = _readStats[a.id];
+                    final readCount = stats?.readCount ?? 0;
+                    final totalCount = stats?.totalCount ?? 1;
+                    final percent = totalCount > 0 ? readCount / totalCount : 0.0;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.shadow,
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
                           ),
-                        ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        '0%',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.success,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  a.title,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textDark,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'All Sections',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            a.content,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textGrey,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.remove_red_eye_outlined,
+                                size: 14,
+                                color: AppColors.textGrey,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '$readCount read',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textGrey,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: percent,
+                                    backgroundColor: AppColors.divider,
+                                    color: AppColors.success,
+                                    minHeight: 6,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${(percent * 100).toInt()}%',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.success,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _formatTime(a.createdAt),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textGrey,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _formatTime(a.createdAt),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textGrey,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -472,6 +569,8 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
     final List<String> allSections = [...widget.sections];
     final List<String> selectedSections = [];
     bool selectAll = false;
+    bool isScheduled = false;
+    DateTime scheduledDate = DateTime.now().add(const Duration(hours: 1));
 
     showModalBottomSheet(
       context: context,
@@ -483,7 +582,7 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
             bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
           child: Container(
-            height: MediaQuery.of(context).size.height * 0.8,
+            height: MediaQuery.of(context).size.height * 0.85,
             decoration: const BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -566,6 +665,93 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
                             fillColor: AppColors.background,
                           ),
                         ),
+                        const SizedBox(height: 16),
+
+                        // Schedule toggle
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Schedule for later',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                            Switch(
+                              value: isScheduled,
+                              onChanged: (v) {
+                                setModalState(() {
+                                  isScheduled = v;
+                                });
+                              },
+                              activeColor: AppColors.primary,
+                            ),
+                          ],
+                        ),
+                        if (isScheduled) ...[
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: scheduledDate,
+                                firstDate: DateTime.now(),
+                                lastDate: DateTime.now().add(const Duration(days: 365)),
+                              );
+                              if (picked != null) {
+                                final time = await showTimePicker(
+                                  context: context,
+                                  initialTime: TimeOfDay.fromDateTime(scheduledDate),
+                                );
+                                if (time != null) {
+                                  setModalState(() {
+                                    scheduledDate = DateTime(
+                                      picked.year,
+                                      picked.month,
+                                      picked.day,
+                                      time.hour,
+                                      time.minute,
+                                    );
+                                  });
+                                }
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: AppColors.background,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.divider),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.calendar_today_rounded,
+                                    color: AppColors.primary,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    '${scheduledDate.day}/${scheduledDate.month}/${scheduledDate.year} at ${scheduledDate.hour.toString().padLeft(2, '0')}:${scheduledDate.minute.toString().padLeft(2, '0')}',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: AppColors.textDark,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  const Icon(
+                                    Icons.edit_rounded,
+                                    color: AppColors.textGrey,
+                                    size: 16,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 16),
 
                         // Section selector
@@ -716,6 +902,7 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
                           content: contentController.text,
                           courseId: widget.course.id,
                           sectionIds: selectedSections,
+                          scheduledAt: isScheduled ? scheduledDate : null,
                         ));
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -1236,7 +1423,10 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
           itemCount: questions.length,
           itemBuilder: (context, index) {
             final q = questions[index];
-            return Container(
+            final firstAnswer = q.answers.isNotEmpty ? q.answers.first : null;
+            return GestureDetector(
+              onTap: () => _showQuestionDetail(q),
+              child: Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -1307,23 +1497,45 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
                         child: const Text('Answer'),
                       ),
                     ),
-                  if (q.isAnswered && q.answers.isNotEmpty)
+                  if (firstAnswer != null)
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.05),
+                        color: firstAnswer.isPinned
+                            ? AppColors.accent.withOpacity(0.08)
+                            : AppColors.primary.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        q.answers.first.content,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textDark,
+                        border: Border.all(
+                          color: firstAnswer.isPinned
+                              ? AppColors.accent.withOpacity(0.4)
+                              : Colors.transparent,
                         ),
+                      ),
+                      child: Row(
+                        children: [
+                          if (firstAnswer.isPinned) ...[
+                            Icon(
+                              Icons.push_pin_rounded,
+                              size: 14,
+                              color: AppColors.accent,
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          Expanded(
+                            child: Text(
+                              firstAnswer.content,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                 ],
               ),
+            ),
             );
           },
         );
@@ -1331,13 +1543,280 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
     );
   }
 
-  void _showAnswerDialog(String questionId, String question) {
-    final controller = TextEditingController();
+  void _showQuestionDetail(ForumQuestionModel q) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => Padding(
+      builder: (_) => Container(
+        height: MediaQuery.of(context).size.height * 0.75,
+        decoration: const BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.divider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.person_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        q.studentName,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatTime(q.createdAt),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textGrey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        _forumBloc.add(ToggleAnswered(q.id));
+                        Navigator.pop(context);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: (q.isAnswered
+                                  ? AppColors.success
+                                  : AppColors.accent)
+                              .withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              q.isAnswered
+                                  ? Icons.check_circle_rounded
+                                  : Icons.help_outline_rounded,
+                              size: 14,
+                              color: q.isAnswered
+                                  ? AppColors.success
+                                  : AppColors.accent,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              q.isAnswered ? 'Answered' : 'Pending',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: q.isAnswered
+                                    ? AppColors.success
+                                    : AppColors.accent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(color: AppColors.divider, height: 1),
+            const SizedBox(height: 16),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      q.content,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: AppColors.textDark,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    if (q.answers.isNotEmpty) ...[
+                      const Text(
+                        'Answers',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...q.answers.map((a) => Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: a.isPinned
+                              ? AppColors.accent.withOpacity(0.08)
+                              : AppColors.primary.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: a.isPinned
+                                ? AppColors.accent.withOpacity(0.4)
+                                : AppColors.primary.withOpacity(0.15),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  a.isPinned
+                                      ? Icons.push_pin_rounded
+                                      : Icons.school_rounded,
+                                  size: 16,
+                                  color: a.isPinned
+                                      ? AppColors.accent
+                                      : AppColors.primary,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  a.teacherName,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: a.isPinned
+                                        ? AppColors.accent
+                                        : AppColors.primary,
+                                  ),
+                                ),
+                                if (a.isPinned) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accent.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Text(
+                                      'Pinned',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: AppColors.accent,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const Spacer(),
+                                GestureDetector(
+                                  onTap: () {
+                                    _forumBloc.add(TogglePin(questionId: q.id, answerId: a.id));
+                                    Navigator.pop(context);
+                                  },
+                                  child: Icon(
+                                    a.isPinned
+                                        ? Icons.push_pin
+                                        : Icons.push_pin_outlined,
+                                    size: 18,
+                                    color: a.isPinned
+                                        ? AppColors.accent
+                                        : AppColors.textGrey,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _formatTime(a.createdAt),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textGrey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              a.content,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: AppColors.textDark,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )),
+                    ],
+                    if (q.answers.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: const Center(
+                          child: Text(
+                            'No answers yet.',
+                            style: TextStyle(
+                              color: AppColors.textGrey,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAnswerDialog(String questionId, String question) {
+    final controller = TextEditingController();
+    bool isPinned = false;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom,
         ),
@@ -1381,7 +1860,35 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
                   fillColor: AppColors.background,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(
+                    isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                    size: 18,
+                    color: isPinned ? AppColors.accent : AppColors.textGrey,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Pin this answer',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  const Spacer(),
+                  Switch(
+                    value: isPinned,
+                    onChanged: (v) {
+                      setModalState(() {
+                        isPinned = v;
+                      });
+                    },
+                    activeColor: AppColors.accent,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -1390,6 +1897,7 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
                       _forumBloc.add(AnswerQuestion(
                         questionId: questionId,
                         content: controller.text,
+                        isPinned: isPinned,
                       ));
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -1408,6 +1916,7 @@ class _TeacherCourseScreenState extends State<TeacherCourseScreen>
             ],
           ),
         ),
+      ),
       ),
     );
   }

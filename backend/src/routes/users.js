@@ -39,4 +39,25 @@ router.get('/me', auth(), async (req, res) => {
   }
 });
 
+// POST /fcm-token — Save or update FCM device token
+router.post('/fcm-token', auth(), async (req, res) => {
+  try {
+    const { fcmToken } = req.body;
+
+    if (!fcmToken) {
+      return res.status(400).json({ message: 'fcmToken is required.' });
+    }
+
+    await pool.query(
+      'UPDATE users SET fcm_token = $1 WHERE id = $2',
+      [fcmToken, req.user.id]
+    );
+
+    res.json({ message: 'FCM token updated.' });
+  } catch (err) {
+    console.error('Update FCM token error:', err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
 module.exports = router;

@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../data/models/announcement_model.dart';
+import '../../data/models/read_receipt_model.dart';
 
 abstract class AnnouncementState extends Equatable {
   const AnnouncementState();
@@ -30,4 +31,19 @@ class AnnouncementCreated extends AnnouncementState {
   const AnnouncementCreated(this.announcement);
   @override
   List<Object?> get props => [announcement];
+}
+
+class AnnouncementReadStatsLoaded extends AnnouncementState {
+  final String announcementId;
+  final int readCount;
+  final int totalCount;
+  final List<ReadReceiptModel> receipts;
+  const AnnouncementReadStatsLoaded({
+    required this.announcementId,
+    required this.readCount,
+    required this.totalCount,
+    required this.receipts,
+  });
+  @override
+  List<Object?> get props => [announcementId, readCount, totalCount, receipts];
 }

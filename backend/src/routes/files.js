@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const pool = require('../config/database');
 const auth = require('../middleware/auth');
+const { sendPushToCourse } = require('../services/notificationService');
 
 const router = express.Router();
 
@@ -107,11 +108,18 @@ router.post('/upload', auth(['teacher', 'admin']), upload.single('file'), async 
 
     for (const student of studentsResult.rows) {
       await pool.query(
-        `INSERT INTO notifications (user_id, type, reference_id)
-         VALUES ($1, 'file', $2)`,
-        [student.id, file.id]
+        `INSERT INTO notifications (user_id, type, reference_id, title, message)
+         VALUES ($1, 'file', $2, $3, $4)`,
+        [student.id, file.id, `New File: ${title}`, topic ? `Topic: ${topic}` : title]
       );
     }
+    sendPushToCourse(
+      courseId,
+      `New File: ${title}`,
+      topic ? `Topic: ${topic} — ${title}` : title,
+      { type: 'file', referenceId: file.id.toString() },
+      req.user.id
+    ).catch(() => {});
 
     res.status(201).json({
       id: file.id.toString(),
