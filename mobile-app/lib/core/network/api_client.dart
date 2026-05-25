@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/app_constants.dart';
 
 class ApiClient {
@@ -21,14 +21,15 @@ class ApiClient {
 }
 
 class _AuthInterceptor extends Interceptor {
+  final _secureStorage = const FlutterSecureStorage();
+
   @override
   void onRequest(
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(AppConstants.tokenKey);
-    if (token != null) {
+    final token = await _secureStorage.read(key: AppConstants.tokenKey);
+    if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
     }
     handler.next(options);
@@ -37,8 +38,8 @@ class _AuthInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     if (err.response?.statusCode == 401) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      const secureStorage = FlutterSecureStorage();
+      await secureStorage.deleteAll();
     }
     handler.next(err);
   }

@@ -1,12 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../features/auth/data/models/user_model.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_event.dart';
 import '../../data/models/course_model.dart';
+import '../../data/repositories/course_repository.dart';
+import '../../../announcements/presentation/bloc/announcement_bloc.dart';
+import '../../../announcements/presentation/bloc/announcement_event.dart';
+import '../../../announcements/presentation/bloc/announcement_state.dart';
 import '../../../messaging/presentation/screens/conversations_screen.dart';
+import '../../presentation/bloc/course_bloc.dart';
+import '../../presentation/bloc/course_event.dart';
+import '../../presentation/bloc/course_state.dart';
 import 'teacher_course_screen.dart';
+
+final sl = GetIt.instance;
 
 class TeacherHomeScreen extends StatefulWidget {
   final UserModel user;
@@ -19,32 +29,11 @@ class TeacherHomeScreen extends StatefulWidget {
 class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   int _currentIndex = 0;
 
-  final List<Map<String, dynamic>> _courses = [
-    {
-      'course': CourseModel(
-        id: '1',
-        name: 'Database Systems',
-        departmentId: '1',
-        year: '3',
-        semester: '1',
-      ),
-      'sections': ['Section A', 'Section B'],
-      'totalStudents': 90,
-      'pendingQuestions': 3,
-    },
-    {
-      'course': CourseModel(
-        id: '2',
-        name: 'Software Architecture and Design',
-        departmentId: '1',
-        year: '3',
-        semester: '1',
-      ),
-      'sections': ['Section A'],
-      'totalStudents': 45,
-      'pendingQuestions': 1,
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    sl<CourseBloc>().add(LoadCourses());
+  }
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
@@ -63,14 +52,51 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          _buildHomeTab(),
-          _buildCoursesTab(),
-          _buildMessagesTab(),
-          _buildProfileTab(),
-        ],
+      body: BlocProvider<CourseBloc>(
+        create: (_) => sl<CourseBloc>(),
+        child: BlocBuilder<CourseBloc, CourseState>(
+          builder: (context, state) {
+            if (state is CourseLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (state is CourseError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        state.message,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: AppColors.textGrey,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () =>
+                            context.read<CourseBloc>().add(LoadCourses()),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+            final courses = state is CourseLoaded ? state.courses : <CourseModel>[];
+            return IndexedStack(
+              index: _currentIndex,
+              children: [
+                _buildHomeTab(courses),
+                _buildCoursesTab(courses),
+                _buildMessagesTab(),
+                _buildProfileTab(),
+              ],
+            );
+          },
+        ),
       ),
       bottomNavigationBar: _buildBottomNav(),
     );
@@ -121,187 +147,195 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
     );
   }
 
-  Widget _buildHomeTab() {
-    final totalStudents = _courses.fold<int>(
-      0, (sum, c) => sum + (c['totalStudents'] as int));
-    final totalPending = _courses.fold<int>(
-      0, (sum, c) => sum + (c['pendingQuestions'] as int));
+  Widget _buildHomeTab(List<CourseModel> courses) {
+    final totalStudents = 0;
+    final totalPending = 0;
 
     return SafeArea(
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${_getGreeting()},',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: AppColors.textGrey,
-                            ),
-                          ),
-                          Text(
-                            'Dr. ${_getFirstName()}',
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textDark,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Stack(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: AppColors.card,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.shadow,
-                                  blurRadius: 8,
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.notifications_outlined,
-                              color: AppColors.textDark,
-                            ),
-                          ),
-                          if (totalPending > 0)
-                            Positioned(
-                              right: 8,
-                              top: 8,
-                              child: Container(
-                                width: 10,
-                                height: 10,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.accent,
-                                  shape: BoxShape.circle,
-                                ),
+      child: RefreshIndicator(
+        onRefresh: () async {
+          context.read<CourseBloc>().add(RefreshCourses());
+          await context.read<CourseBloc>().stream.firstWhere(
+            (state) => state is CourseLoaded || state is CourseError,
+          );
+        },
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${_getGreeting()},',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: AppColors.textGrey,
                               ),
                             ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Summary Card
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.primary, AppColors.primaryDark],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildSummaryItem(
-                          '${_courses.length}',
-                          'Courses',
-                          Icons.book_rounded,
+                            Text(
+                              'Dr. ${_getFirstName()}',
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                          ],
                         ),
-                        _buildSummaryItem(
-                          '$totalStudents',
-                          'Students',
-                          Icons.people_rounded,
-                        ),
-                        _buildSummaryItem(
-                          '$totalPending',
-                          'Pending Q&A',
-                          Icons.question_answer_rounded,
+                        Stack(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: AppColors.card,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.shadow,
+                                    blurRadius: 8,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.notifications_outlined,
+                                color: AppColors.textDark,
+                              ),
+                            ),
+                            if (totalPending > 0)
+                              Positioned(
+                                right: 8,
+                                top: 8,
+                                child: Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.accent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-                  // Quick Actions
-                  const Text(
-                    'Quick Actions',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textDark,
+                    // Summary Card
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [AppColors.primary, AppColors.primaryDark],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _buildSummaryItem(
+                            '${courses.length}',
+                            'Courses',
+                            Icons.book_rounded,
+                          ),
+                          _buildSummaryItem(
+                            '$totalStudents',
+                            'Students',
+                            Icons.people_rounded,
+                          ),
+                          _buildSummaryItem(
+                            '$totalPending',
+                            'Pending Q&A',
+                            Icons.question_answer_rounded,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildQuickAction(
-                          Icons.campaign_rounded,
-                          'New\nAnnouncement',
-                          AppColors.primary,
-                          () => _showCreateAnnouncementSheet(),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildQuickAction(
-                          Icons.upload_file_rounded,
-                          'Upload\nFile',
-                          AppColors.success,
-                          () {},
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildQuickAction(
-                          Icons.question_answer_rounded,
-                          'View\nQ&A',
-                          AppColors.accent,
-                          () => setState(() => _currentIndex = 1),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-                  // My Courses
-                  const Text(
-                    'My Courses',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textDark,
+                    // Quick Actions
+                    const Text(
+                      'Quick Actions',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildQuickAction(
+                            Icons.campaign_rounded,
+                            'New\nAnnouncement',
+                            AppColors.primary,
+                            () => _showCreateAnnouncementSheet(courses),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildQuickAction(
+                            Icons.upload_file_rounded,
+                            'Upload\nFile',
+                            AppColors.success,
+                            () {},
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildQuickAction(
+                            Icons.question_answer_rounded,
+                            'View\nQ&A',
+                            AppColors.accent,
+                            () => setState(() => _currentIndex = 1),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // My Courses
+                    const Text(
+                      'My Courses',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // Course Cards
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _buildTeacherCourseCard(_courses[index]),
-                childCount: _courses.length,
+            // Course Cards
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) =>
+                      _buildTeacherCourseCard(courses[index]),
+                  childCount: courses.length,
+                ),
               ),
             ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 20)),
-        ],
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+          ],
+        ),
       ),
     );
   }
@@ -361,12 +395,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
     );
   }
 
-  Widget _buildTeacherCourseCard(Map<String, dynamic> courseData) {
-    final course = courseData['course'] as CourseModel;
-    final sections = courseData['sections'] as List<String>;
-    final students = courseData['totalStudents'] as int;
-    final pending = courseData['pendingQuestions'] as int;
-
+  Widget _buildTeacherCourseCard(CourseModel course) {
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -374,7 +403,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
           MaterialPageRoute(
             builder: (_) => TeacherCourseScreen(
               course: course,
-              sections: sections,
+              sections: const [],
             ),
           ),
         );
@@ -424,9 +453,9 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        sections.join(' • '),
-                        style: const TextStyle(
+                      const Text(
+                        'Course',
+                        style: TextStyle(
                           fontSize: 12,
                           color: AppColors.primary,
                           fontWeight: FontWeight.w500,
@@ -447,21 +476,13 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
+                _buildCourseStats('0', 'Students', Icons.people_outline),
                 _buildCourseStats(
-                  '$students',
-                  'Students',
-                  Icons.people_outline,
-                ),
-                _buildCourseStats(
-                  '$pending',
+                  '0',
                   'Pending Q&A',
                   Icons.question_answer_outlined,
                 ),
-                _buildCourseStats(
-                  '${sections.length}',
-                  'Sections',
-                  Icons.group_outlined,
-                ),
+                _buildCourseStats('0', 'Sections', Icons.group_outlined),
               ],
             ),
           ],
@@ -494,7 +515,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
     );
   }
 
-  Widget _buildCoursesTab() {
+  Widget _buildCoursesTab(List<CourseModel> courses) {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -512,9 +533,8 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
             const SizedBox(height: 16),
             Expanded(
               child: ListView.builder(
-                itemCount: _courses.length,
-                itemBuilder: (_, i) =>
-                    _buildTeacherCourseCard(_courses[i]),
+                itemCount: courses.length,
+                itemBuilder: (_, i) => _buildTeacherCourseCard(courses[i]),
               ),
             ),
           ],
@@ -524,7 +544,7 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
   }
 
   Widget _buildMessagesTab() {
-    return const ConversationsScreen();
+    return ConversationsScreen(currentUser: widget.user);
   }
 
   Widget _buildProfileTab() {
@@ -603,177 +623,219 @@ class _TeacherHomeScreenState extends State<TeacherHomeScreen> {
     );
   }
 
-  void _showCreateAnnouncementSheet() {
+  void _showCreateAnnouncementSheet(List<CourseModel> courses) {
     final titleController = TextEditingController();
     final contentController = TextEditingController();
     String selectedTarget = 'All Sections';
     final targets = ['All Sections', 'Section A', 'Section B'];
+    final courseId = courses.isNotEmpty ? courses.first.id : '';
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-          ),
-          child: Container(
-            height: MediaQuery.of(context).size.height * 0.85,
-            decoration: const BoxDecoration(
-              color: AppColors.card,
-              borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.divider,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+      builder: (_) => BlocProvider<AnnouncementBloc>.value(
+        value: sl<AnnouncementBloc>(),
+        child: BlocConsumer<AnnouncementBloc, AnnouncementState>(
+          listener: (context, state) {
+            if (state is AnnouncementCreated) {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Announcement posted successfully!'),
+                  backgroundColor: AppColors.success,
+                  behavior: SnackBarBehavior.floating,
                 ),
-                const SizedBox(height: 20),
-                const Text(
-                  'New Announcement',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
-                  ),
+              );
+            }
+            if (state is AnnouncementError) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(state.message),
+                  backgroundColor: AppColors.error,
+                  behavior: SnackBarBehavior.floating,
                 ),
-                const SizedBox(height: 20),
-
-                // Title
-                const Text(
-                  'Title',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textDark,
-                  ),
+              );
+            }
+          },
+          builder: (context, state) {
+            final isLoading = state is AnnouncementLoading;
+            return StatefulBuilder(
+              builder: (context, setModalState) => Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: titleController,
-                  decoration: InputDecoration(
-                    hintText: 'Announcement title',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: AppColors.divider),
-                    ),
-                    filled: true,
-                    fillColor: AppColors.background,
+                child: Container(
+                  height: MediaQuery.of(context).size.height * 0.85,
+                  decoration: const BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(20)),
                   ),
-                ),
-                const SizedBox(height: 16),
-
-                // Content
-                const Text(
-                  'Message',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: contentController,
-                  maxLines: 5,
-                  decoration: InputDecoration(
-                    hintText: 'Write your announcement here...',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide:
-                          const BorderSide(color: AppColors.divider),
-                    ),
-                    filled: true,
-                    fillColor: AppColors.background,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Target
-                const Text(
-                  'Send To',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: targets.map((target) {
-                    final isSelected = selectedTarget == target;
-                    return GestureDetector(
-                      onTap: () =>
-                          setModalState(() => selectedTarget = target),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.primary
-                              : AppColors.background,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.divider,
-                          ),
-                        ),
-                        child: Text(
-                          target,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: isSelected
-                                ? Colors.white
-                                : AppColors.textGrey,
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: AppColors.divider,
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
                       ),
-                    );
-                  }).toList(),
-                ),
-                const Spacer(),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'New Announcement',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
 
-                // Post Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (titleController.text.isNotEmpty &&
-                          contentController.text.isNotEmpty) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                                'Announcement posted successfully!'),
-                            backgroundColor: AppColors.success,
-                            behavior: SnackBarBehavior.floating,
+                      // Title
+                      const Text(
+                        'Title',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: titleController,
+                        decoration: InputDecoration(
+                          hintText: 'Announcement title',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.divider),
                           ),
-                        );
-                      }
-                    },
-                    child: const Text('Post Announcement'),
+                          filled: true,
+                          fillColor: AppColors.background,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Content
+                      const Text(
+                        'Message',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: contentController,
+                        maxLines: 5,
+                        decoration: InputDecoration(
+                          hintText: 'Write your announcement here...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: AppColors.divider),
+                          ),
+                          filled: true,
+                          fillColor: AppColors.background,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Target
+                      const Text(
+                        'Send To',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: targets.map((target) {
+                          final isSelected = selectedTarget == target;
+                          return GestureDetector(
+                            onTap: () =>
+                                setModalState(() => selectedTarget = target),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppColors.primary
+                                    : AppColors.background,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppColors.primary
+                                      : AppColors.divider,
+                                ),
+                              ),
+                              child: Text(
+                                target,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : AppColors.textGrey,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const Spacer(),
+
+                      // Post Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: isLoading ||
+                                  titleController.text.isEmpty ||
+                                  contentController.text.isEmpty
+                              ? null
+                              : () {
+                                  context.read<AnnouncementBloc>().add(
+                                    CreateAnnouncement(
+                                      title: titleController.text,
+                                      content: contentController.text,
+                                      courseId: courseId,
+                                      sectionIds: selectedTarget ==
+                                              'All Sections'
+                                          ? null
+                                          : [selectedTarget],
+                                    ),
+                                  );
+                                },
+                          child: isLoading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Post Announcement'),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );

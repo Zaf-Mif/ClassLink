@@ -40,6 +40,7 @@ dependencies:
   get_it: ^9.2.1
   onesignal_flutter: ^5.5.5
   shared_preferences: ^2.5.3
+  flutter_secure_storage: ^9.2.4
   cached_network_image: ^3.4.1
   file_picker: ^11.0.2
   flutter_local_notifications: ^20.1.0

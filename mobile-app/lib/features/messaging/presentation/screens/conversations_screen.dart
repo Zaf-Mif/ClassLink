@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../features/auth/data/models/user_model.dart';
 import 'chat_screen.dart';
 
 class _ConversationItem {
@@ -19,7 +20,9 @@ class _ConversationItem {
 }
 
 class ConversationsScreen extends StatelessWidget {
-  const ConversationsScreen({super.key});
+  final UserModel? currentUser;
+
+  const ConversationsScreen({super.key, this.currentUser});
 
   static final List<_ConversationItem> _conversations = [
     _ConversationItem(
@@ -107,7 +110,9 @@ class ConversationsScreen extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (_) => ChatScreen(
+                    receiverId: conversation.id,
                     receiverName: conversation.name,
+                    currentUser: widget.currentUser ?? UserModel(id: '', name: '', email: '', role: ''),
                   ),
                 ),
               );

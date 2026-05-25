@@ -38,17 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _navigateByRole(String role) {
-    switch (role) {
-      case AppConstants.roleStudent:
-        Navigator.pushReplacementNamed(context, '/student-home');
-        break;
-      case AppConstants.roleTeacher:
-        Navigator.pushReplacementNamed(context, '/teacher-home');
-        break;
-      case AppConstants.roleAdmin:
-        Navigator.pushReplacementNamed(context, '/admin-dashboard');
-        break;
-    }
+    // Handled by BlocBuilder in main.dart
   }
 
   @override

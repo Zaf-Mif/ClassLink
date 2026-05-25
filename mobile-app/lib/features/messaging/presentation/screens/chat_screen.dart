@@ -1,13 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../features/auth/data/models/user_model.dart';
 import '../../data/models/message_model.dart';
+import '../../presentation/bloc/message_bloc.dart';
+import '../../presentation/bloc/message_event.dart';
+import '../../presentation/bloc/message_state.dart';
+
+final sl = GetIt.instance;
 
 class ChatScreen extends StatefulWidget {
+  final String receiverId;
   final String receiverName;
+  final UserModel currentUser;
 
   const ChatScreen({
     super.key,
+    required this.receiverId,
     required this.receiverName,
+    required this.currentUser,
   });
 
   @override
@@ -15,71 +27,8 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  static const String _currentUserId = 'student-1';
-  static const String _currentUserName = 'Zaferan Miftah';
-
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<MessageModel> _messages = [];
-  int _messageIdCounter = 100;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSampleMessages();
-  }
-
-  void _loadSampleMessages() {
-    final now = DateTime.now();
-    _messages.addAll([
-      MessageModel(
-        id: '1',
-        senderId: 'teacher-1',
-        senderName: widget.receiverName,
-        receiverId: _currentUserId,
-        content: 'Hi Zaferan, do you have any questions about the database assignment?',
-        sentAt: now.subtract(const Duration(hours: 2, minutes: 15)),
-        isRead: true,
-      ),
-      MessageModel(
-        id: '2',
-        senderId: _currentUserId,
-        senderName: _currentUserName,
-        receiverId: 'teacher-1',
-        content: 'Hello! Yes, should we include ER diagrams in the report?',
-        sentAt: now.subtract(const Duration(hours: 2, minutes: 10)),
-        isRead: true,
-      ),
-      MessageModel(
-        id: '3',
-        senderId: 'teacher-1',
-        senderName: widget.receiverName,
-        receiverId: _currentUserId,
-        content:
-            'Yes, include ER diagrams and a short explanation of your normalization steps.',
-        sentAt: now.subtract(const Duration(hours: 2, minutes: 5)),
-        isRead: true,
-      ),
-      MessageModel(
-        id: '4',
-        senderId: _currentUserId,
-        senderName: _currentUserName,
-        receiverId: 'teacher-1',
-        content: 'Got it, thank you! I will submit before Friday.',
-        sentAt: now.subtract(const Duration(hours: 1, minutes: 50)),
-        isRead: true,
-      ),
-      MessageModel(
-        id: '5',
-        senderId: 'teacher-1',
-        senderName: widget.receiverName,
-        receiverId: _currentUserId,
-        content: 'Great. Let me know if you need help during office hours.',
-        sentAt: now.subtract(const Duration(minutes: 30)),
-        isRead: true,
-      ),
-    ]);
-  }
 
   @override
   void dispose() {
@@ -88,7 +37,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  bool _isSentByMe(MessageModel message) => message.senderId == _currentUserId;
+  bool _isSentByMe(MessageModel message) => message.senderId == widget.currentUser.id;
 
   String _formatMessageTime(DateTime dateTime) {
     final hour = dateTime.hour.toString().padLeft(2, '0');
@@ -99,23 +48,14 @@ class _ChatScreenState extends State<ChatScreen> {
   void _sendMessage() {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
+    context.read<MessageBloc>().add(SendMessage(
+      receiverId: widget.receiverId,
+      content: text,
+    ));
+    _messageController.clear();
+  }
 
-    setState(() {
-      _messageIdCounter++;
-      _messages.add(
-        MessageModel(
-          id: '$_messageIdCounter',
-          senderId: _currentUserId,
-          senderName: _currentUserName,
-          receiverId: 'teacher-1',
-          content: text,
-          sentAt: DateTime.now(),
-          isRead: false,
-        ),
-      );
-      _messageController.clear();
-    });
-
+  void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -152,29 +92,59 @@ class _ChatScreenState extends State<ChatScreen> {
           child: Container(color: AppColors.divider, height: 1),
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                final isSent = _isSentByMe(message);
-                return _MessageBubble(
-                  message: message,
-                  isSent: isSent,
-                  formattedTime: _formatMessageTime(message.sentAt),
-                );
-              },
-            ),
-          ),
-          _MessageInputBar(
-            controller: _messageController,
-            onSend: _sendMessage,
-          ),
-        ],
+      body: BlocProvider<MessageBloc>(
+        create: (_) => sl<MessageBloc>()..add(LoadConversation(widget.receiverId)),
+        child: BlocBuilder<MessageBloc, MessageState>(
+          builder: (context, state) {
+            if (state is MessageLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (state is MessageError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    state.message,
+                    style: const TextStyle(color: AppColors.textGrey, fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+            if (state is MessageLoaded) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (_scrollController.hasClients) {
+                  _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+                }
+              });
+              return Column(
+                children: [
+                  Expanded(
+                    child: ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      itemCount: state.messages.length,
+                      itemBuilder: (context, index) {
+                        final message = state.messages[index];
+                        final isSent = _isSentByMe(message);
+                        return _MessageBubble(
+                          message: message,
+                          isSent: isSent,
+                          formattedTime: _formatMessageTime(message.sentAt),
+                        );
+                      },
+                    ),
+                  ),
+                  _MessageInputBar(
+                    controller: _messageController,
+                    onSend: _sendMessage,
+                  ),
+                ],
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
       ),
     );
   }

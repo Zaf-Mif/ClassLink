@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../features/auth/presentation/bloc/auth_bloc.dart';
 import '../../../../features/auth/presentation/bloc/auth_event.dart';
 import '../../../../features/auth/data/models/user_model.dart';
 import '../../data/models/course_model.dart';
 import '../../../messaging/presentation/screens/conversations_screen.dart';
+import '../../presentation/bloc/course_bloc.dart';
+import '../../presentation/bloc/course_event.dart';
+import '../../presentation/bloc/course_state.dart';
 import 'course_screen.dart';
+
+final sl = GetIt.instance;
 
 class StudentHomeScreen extends StatefulWidget {
   final UserModel user;
@@ -19,45 +25,11 @@ class StudentHomeScreen extends StatefulWidget {
 class _StudentHomeScreenState extends State<StudentHomeScreen> {
   int _currentIndex = 0;
 
-  // Sample data for now — will connect to API later
-  final List<CourseModel> _courses = [
-    CourseModel(
-      id: '1',
-      name: 'Database Systems',
-      departmentId: '1',
-      year: '3',
-      semester: '1',
-      newAnnouncements: 2,
-      newFiles: 1,
-    ),
-    CourseModel(
-      id: '2',
-      name: 'Mobile Application Development',
-      departmentId: '1',
-      year: '3',
-      semester: '1',
-      newAnnouncements: 0,
-      newFiles: 3,
-    ),
-    CourseModel(
-      id: '3',
-      name: 'Software Architecture and Design',
-      departmentId: '1',
-      year: '3',
-      semester: '1',
-      newAnnouncements: 1,
-      newFiles: 0,
-    ),
-    CourseModel(
-      id: '4',
-      name: 'Information Retrieval and Storage',
-      departmentId: '1',
-      year: '3',
-      semester: '1',
-      newAnnouncements: 0,
-      newFiles: 0,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    sl<CourseBloc>().add(LoadCourses());
+  }
 
   String _getGreeting() {
     final hour = DateTime.now().hour;
@@ -76,15 +48,18 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          _buildHomeTab(),
-          _buildCoursesTab(),
-          _buildMessagesTab(),
-          _buildSearchTab(),
-          _buildProfileTab(),
-        ],
+      body: BlocProvider<CourseBloc>(
+        create: (_) => sl<CourseBloc>(),
+        child: IndexedStack(
+          index: _currentIndex,
+          children: [
+            _buildHomeTab(),
+            _buildCoursesTab(),
+            _buildMessagesTab(),
+            _buildSearchTab(),
+            _buildProfileTab(),
+          ],
+        ),
       ),
       bottomNavigationBar: _buildBottomNav(),
     );
@@ -150,148 +125,179 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Widget _buildHomeTab() {
-    final totalNew = _courses.fold<int>(
-      0,
-      (sum, c) => sum + (c.newAnnouncements ?? 0) + (c.newFiles ?? 0),
-    );
+    return BlocBuilder<CourseBloc, CourseState>(
+      builder: (context, state) {
+        if (state is CourseLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (state is CourseError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(state.message, style: const TextStyle(color: AppColors.error)),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => sl<CourseBloc>().add(LoadCourses()),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+        if (state is CourseLoaded) {
+          final courses = state.courses;
+          final totalNew = courses.fold<int>(
+            0,
+            (sum, c) => sum + (c.newAnnouncements ?? 0) + (c.newFiles ?? 0),
+          );
 
-    return SafeArea(
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
+          return SafeArea(
+            child: RefreshIndicator(
+              onRefresh: () async {
+                sl<CourseBloc>().add(RefreshCourses());
+              },
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            '${_getGreeting()},',
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: AppColors.textGrey,
-                              fontFamily: 'Poppins',
+                          // Header
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${_getGreeting()},',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: AppColors.textGrey,
+                                      fontFamily: 'Poppins',
+                                    ),
+                                  ),
+                                  Text(
+                                    _getFirstName(),
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.textDark,
+                                      fontFamily: 'Poppins',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Stack(
+                                children: [
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.card,
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppColors.shadow,
+                                          blurRadius: 8,
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.notifications_outlined,
+                                      color: AppColors.textDark,
+                                    ),
+                                  ),
+                                  if (totalNew > 0)
+                                    Positioned(
+                                      right: 8,
+                                      top: 8,
+                                      child: Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: const BoxDecoration(
+                                          color: AppColors.accent,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Summary Card
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [AppColors.primary, AppColors.primaryDark],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                _buildSummaryItem(
+                                  '${courses.length}',
+                                  'Courses',
+                                  Icons.book_rounded,
+                                ),
+                                _buildSummaryItem(
+                                  '${courses.fold<int>(0, (s, c) => s + (c.newAnnouncements ?? 0))}',
+                                  'New Updates',
+                                  Icons.campaign_rounded,
+                                ),
+                                _buildSummaryItem(
+                                  '${courses.fold<int>(0, (s, c) => s + (c.newFiles ?? 0))}',
+                                  'New Files',
+                                  Icons.folder_rounded,
+                                ),
+                              ],
                             ),
                           ),
-                          Text(
-                            _getFirstName(),
-                            style: const TextStyle(
-                              fontSize: 24,
+                          const SizedBox(height: 24),
+
+                          // Courses Header
+                          const Text(
+                            'Your Courses',
+                            style: TextStyle(
+                              fontSize: 18,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textDark,
                               fontFamily: 'Poppins',
                             ),
                           ),
+                          const SizedBox(height: 12),
                         ],
                       ),
-                      Stack(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: AppColors.card,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.shadow,
-                                  blurRadius: 8,
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.notifications_outlined,
-                              color: AppColors.textDark,
-                            ),
-                          ),
-                          if (totalNew > 0)
-                            Positioned(
-                              right: 8,
-                              top: 8,
-                              child: Container(
-                                width: 10,
-                                height: 10,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.accent,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 24),
 
-                  // Summary Card
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.primary, AppColors.primaryDark],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                  // Course Cards
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => _buildCourseCard(courses[index]),
+                        childCount: courses.length,
                       ),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildSummaryItem(
-                          '${_courses.length}',
-                          'Courses',
-                          Icons.book_rounded,
-                        ),
-                        _buildSummaryItem(
-                          '${_courses.fold<int>(0, (s, c) => s + (c.newAnnouncements ?? 0))}',
-                          'New Updates',
-                          Icons.campaign_rounded,
-                        ),
-                        _buildSummaryItem(
-                          '${_courses.fold<int>(0, (s, c) => s + (c.newFiles ?? 0))}',
-                          'New Files',
-                          Icons.folder_rounded,
-                        ),
-                      ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-
-                  // Courses Header
-                  const Text(
-                    'Your Courses',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textDark,
-                      fontFamily: 'Poppins',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                  const SliverToBoxAdapter(child: SizedBox(height: 20)),
                 ],
               ),
             ),
-          ),
-
-          // Course Cards
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _buildCourseCard(_courses[index]),
-                childCount: _courses.length,
-              ),
-            ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 20)),
-        ],
-      ),
+          );
+        }
+        return const SizedBox();
+      },
     );
   }
 
@@ -439,36 +445,62 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Widget _buildCoursesTab() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'All Courses',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textDark,
-                fontFamily: 'Poppins',
+    return BlocBuilder<CourseBloc, CourseState>(
+      builder: (context, state) {
+        if (state is CourseLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (state is CourseError) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(state.message, style: const TextStyle(color: AppColors.error)),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => sl<CourseBloc>().add(LoadCourses()),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+        if (state is CourseLoaded) {
+          final courses = state.courses;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'All Courses',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textDark,
+                      fontFamily: 'Poppins',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: courses.length,
+                      itemBuilder: (_, i) => _buildCourseCard(courses[i]),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _courses.length,
-                itemBuilder: (_, i) => _buildCourseCard(_courses[i]),
-              ),
-            ),
-          ],
-        ),
-      ),
+          );
+        }
+        return const SizedBox();
+      },
     );
   }
 
   Widget _buildMessagesTab() {
-    return const ConversationsScreen();
+    return ConversationsScreen(currentUser: widget.user);
   }
 
   Widget _buildSearchTab() {
