@@ -19,20 +19,39 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      '.pdf', '.docx', '.pptx',
+      '.jpg', '.jpeg', '.png', '.gif',
+      '.mp4', '.mov', '.avi', '.webm'
+    ];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Unsupported file type'), false);
+    }
+  },
 });
 
 router.get('/:courseId', auth(), async (req, res) => {
   try {
     const { courseId } = req.params;
+    const { topic } = req.query; // optional topic filter
 
-    const result = await pool.query(
-      `SELECT f.*, u.name AS teacher_name
-       FROM files f
-       JOIN users u ON u.id = f.teacher_id
-       WHERE f.course_id = $1
-       ORDER BY f.uploaded_at DESC`,
-      [courseId]
-    );
+    let query = `
+      SELECT f.*, u.name AS teacher_name
+      FROM files f
+      JOIN users u ON u.id = f.teacher_id
+      WHERE f.course_id = $1`;
+    const values = [courseId];
+    if (topic) {
+      query += ` AND f.topic ILIKE $2`;
+      values.push(`%${topic}%`);
+    }
+    query += ` ORDER BY f.uploaded_at DESC`;
+
+    const result = await pool.query(query, values);
 
     const files = result.rows.map((f) => ({
       id: f.id.toString(),
@@ -44,7 +63,6 @@ router.get('/:courseId', auth(), async (req, res) => {
       versionNumber: f.version_number,
       uploadedAt: f.uploaded_at,
     }));
-
     res.json(files);
   } catch (err) {
     console.error('Get files error:', err);
@@ -106,6 +124,48 @@ router.post('/upload', auth(['teacher', 'admin']), upload.single('file'), async 
     });
   } catch (err) {
     console.error('Upload file error:', err);
+    res.status(500).json({ message: 'Internal server error.' });
+  }
+});
+
+router.get('/search', auth(), async (req, res) => {
+  try {
+    const { name, topic, courseId } = req.query;
+    if (!courseId) {
+      return res.status(400).json({ message: 'courseId query param is required.' });
+    }
+    let query = `
+      SELECT f.*, u.name AS teacher_name
+      FROM files f
+      JOIN users u ON u.id = f.teacher_id
+      WHERE f.course_id = $1`;
+    const values = [courseId];
+    let idx = 2;
+    if (name) {
+      query += ` AND f.title ILIKE $${idx}`;
+      values.push(`%${name}%`);
+      idx++;
+    }
+    if (topic) {
+      query += ` AND f.topic ILIKE $${idx}`;
+      values.push(`%${topic}%`);
+      idx++;
+    }
+    query += ` ORDER BY f.uploaded_at DESC`;
+    const result = await pool.query(query, values);
+    const files = result.rows.map(f => ({
+      id: f.id.toString(),
+      title: f.title,
+      fileUrl: f.file_url,
+      topic: f.topic,
+      courseId: f.course_id.toString(),
+      teacherName: f.teacher_name,
+      versionNumber: f.version_number,
+      uploadedAt: f.uploaded_at,
+    }));
+    res.json(files);
+  } catch (err) {
+    console.error('Search files error:', err);
     res.status(500).json({ message: 'Internal server error.' });
   }
 });
