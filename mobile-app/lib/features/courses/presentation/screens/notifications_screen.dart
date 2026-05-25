@@ -1,31 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../notifications/presentation/bloc/notification_bloc.dart';
+import '../../../notifications/presentation/bloc/notification_event.dart';
+import '../../../notifications/presentation/bloc/notification_state.dart';
+import '../../../notifications/data/models/notification_model.dart';
 
-enum NotificationType {
-  announcement,
-  assignment,
-  file,
-  message,
-  qaAnswer,
-}
-
-class AppNotification {
-  final String id;
-  final String title;
-  final String subtitle;
-  final String timeAgo;
-  final NotificationType type;
-  bool isRead;
-
-  AppNotification({
-    required this.id,
-    required this.title,
-    required this.subtitle,
-    required this.timeAgo,
-    required this.type,
-    this.isRead = false,
-  });
-}
+final sl = GetIt.instance;
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -35,92 +17,51 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  final List<AppNotification> _notifications = [
-    AppNotification(
-      id: '1',
-      title: 'New Announcement',
-      subtitle: 'Dr. Ahmed posted in Database Systems',
-      timeAgo: '5m ago',
-      type: NotificationType.announcement,
-    ),
-    AppNotification(
-      id: '2',
-      title: 'Assignment Due Soon',
-      subtitle: 'ER Diagram due in 2 days',
-      timeAgo: '1h ago',
-      type: NotificationType.assignment,
-    ),
-    AppNotification(
-      id: '3',
-      title: 'Question Answered',
-      subtitle: 'Dr. Ahmed answered your question',
-      timeAgo: '3h ago',
-      type: NotificationType.qaAnswer,
-    ),
-    AppNotification(
-      id: '4',
-      title: 'New File Uploaded',
-      subtitle: 'Chapter 2 Notes added to Mobile Dev',
-      timeAgo: '1d ago',
-      type: NotificationType.file,
-      isRead: true,
-    ),
-    AppNotification(
-      id: '5',
-      title: 'New Message',
-      subtitle: 'Dr. Sara sent you a message',
-      timeAgo: '2d ago',
-      type: NotificationType.message,
-      isRead: true,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    sl<NotificationBloc>().add(LoadNotifications());
+  }
 
   void _markAllAsRead() {
-    setState(() {
-      for (final n in _notifications) {
-        n.isRead = true;
+    final state = context.read<NotificationBloc>().state;
+    if (state is NotificationLoaded) {
+      for (final n in state.notifications) {
+        if (!n.isRead) {
+          context.read<NotificationBloc>().add(MarkNotificationRead(n.id));
+        }
       }
-    });
-  }
-
-  void _markAsRead(AppNotification notification) {
-    setState(() => notification.isRead = true);
-  }
-
-  ({Color bg, Color icon, IconData iconData}) _styleForType(
-      NotificationType type) {
-    switch (type) {
-      case NotificationType.announcement:
-        return (
-          bg: AppColors.primary.withValues(alpha: 0.12),
-          icon: AppColors.primary,
-          iconData: Icons.campaign_rounded,
-        );
-      case NotificationType.assignment:
-        return (
-          bg: AppColors.accent.withValues(alpha: 0.12),
-          icon: AppColors.accent,
-          iconData: Icons.assignment_rounded,
-        );
-      case NotificationType.file:
-        return (
-          bg: AppColors.success.withValues(alpha: 0.12),
-          icon: AppColors.success,
-          iconData: Icons.upload_file_rounded,
-        );
-      case NotificationType.message:
-        return (
-          bg: AppColors.primary.withValues(alpha: 0.12),
-          icon: AppColors.primary,
-          iconData: Icons.chat_bubble_rounded,
-        );
-      case NotificationType.qaAnswer:
-        return (
-          bg: AppColors.success.withValues(alpha: 0.12),
-          icon: AppColors.success,
-          iconData: Icons.check_circle_rounded,
-        );
     }
+  }
+
+  IconData _iconForType(String type) {
+    switch (type) {
+      case 'announcement': return Icons.campaign_rounded;
+      case 'assignment': return Icons.assignment_rounded;
+      case 'file': return Icons.upload_file_rounded;
+      case 'message': return Icons.chat_bubble_rounded;
+      case 'qa_answer': return Icons.check_circle_rounded;
+      default: return Icons.notifications_rounded;
+    }
+  }
+
+  Color _colorForType(String type) {
+    switch (type) {
+      case 'announcement': return AppColors.primary;
+      case 'assignment': return AppColors.accent;
+      case 'file': return AppColors.success;
+      case 'message': return AppColors.primary;
+      case 'qa_answer': return AppColors.success;
+      default: return AppColors.textGrey;
+    }
+  }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${dt.day}/${dt.month}/${dt.year}';
   }
 
   @override
@@ -155,20 +96,61 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         ],
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: _notifications.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          final n = _notifications[index];
-          final style = _styleForType(n.type);
-          return _NotificationTile(
-            notification: n,
-            iconBg: style.bg,
-            iconColor: style.icon,
-            iconData: style.iconData,
-            onTap: () => _markAsRead(n),
-          );
+      body: BlocBuilder<NotificationBloc, NotificationState>(
+        builder: (context, state) {
+          if (state is NotificationLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (state is NotificationError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(state.message, style: const TextStyle(color: AppColors.error)),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => sl<NotificationBloc>().add(LoadNotifications()),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          }
+          if (state is NotificationLoaded) {
+            final notifications = state.notifications;
+            if (notifications.isEmpty) {
+              return const Center(
+                child: Text(
+                  'No notifications yet',
+                  style: TextStyle(color: AppColors.textGrey, fontSize: 16),
+                ),
+              );
+            }
+            return ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: notifications.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final n = notifications[index];
+                final iconColor = _colorForType(n.type);
+                return _NotificationTile(
+                  title: n.type,
+                  subtitle: n.referenceId ?? '',
+                  timeAgo: _timeAgo(n.createdAt),
+                  isRead: n.isRead,
+                  iconBg: iconColor.withValues(alpha: 0.12),
+                  iconColor: iconColor,
+                  iconData: _iconForType(n.type),
+                  onTap: () {
+                    if (!n.isRead) {
+                      context.read<NotificationBloc>().add(MarkNotificationRead(n.id));
+                    }
+                  },
+                );
+              },
+            );
+          }
+          return const SizedBox();
         },
       ),
     );
@@ -176,14 +158,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 }
 
 class _NotificationTile extends StatelessWidget {
-  final AppNotification notification;
+  final String title;
+  final String subtitle;
+  final String timeAgo;
+  final bool isRead;
   final Color iconBg;
   final Color iconColor;
   final IconData iconData;
   final VoidCallback onTap;
 
   const _NotificationTile({
-    required this.notification,
+    required this.title,
+    required this.subtitle,
+    required this.timeAgo,
+    required this.isRead,
     required this.iconBg,
     required this.iconColor,
     required this.iconData,
@@ -192,10 +180,8 @@ class _NotificationTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final unread = !notification.isRead;
-
     return Material(
-      color: unread
+      color: !isRead
           ? AppColors.primary.withValues(alpha: 0.06)
           : AppColors.card,
       borderRadius: BorderRadius.circular(14),
@@ -206,15 +192,15 @@ class _NotificationTile extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            boxShadow: unread
-                ? null
-                : [
+            boxShadow: isRead
+                ? [
                     BoxShadow(
                       color: AppColors.shadow,
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
-                  ],
+                  ]
+                : null,
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -234,18 +220,17 @@ class _NotificationTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      notification.title,
+                      title,
                       style: TextStyle(
                         fontSize: 15,
-                        fontWeight:
-                            unread ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: !isRead ? FontWeight.w700 : FontWeight.w500,
                         color: AppColors.textDark,
                         fontFamily: 'Poppins',
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      notification.subtitle,
+                      subtitle,
                       style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.textGrey,
@@ -260,14 +245,14 @@ class _NotificationTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    notification.timeAgo,
+                    timeAgo,
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textLight,
                       fontFamily: 'Poppins',
                     ),
                   ),
-                  if (unread) ...[
+                  if (!isRead) ...[
                     const SizedBox(height: 8),
                     Container(
                       width: 8,

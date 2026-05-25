@@ -1,10 +1,14 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:dio/dio.dart';
+import 'package:get_it/get_it.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/user_model.dart';
 import '../../../courses/presentation/screens/student_home_screen.dart';
+
+final sl = GetIt.instance;
 
 class OtpScreen extends StatefulWidget {
   final String email;
@@ -91,42 +95,58 @@ class _OtpScreenState extends State<OtpScreen> {
 
   Future<void> _verifyOtp() async {
     if (!_isOtpComplete) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter the full 6-digit code'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _showSnack('Please enter the full 6-digit code', AppColors.error);
       return;
     }
 
     setState(() => _isVerifying = true);
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-
-    final user = UserModel(
-      id: 'otp-user',
-      name: 'ASTU Student',
-      email: widget.email,
-      role: 'student',
-    );
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => StudentHomeScreen(user: user)),
-      (route) => false,
-    );
+    try {
+      await sl<ApiClient>().dio.post('/auth/verify-otp', data: {
+        'email': widget.email,
+        'otp': _otpCode,
+      });
+      if (!mounted) return;
+      final user = UserModel(
+        id: '',
+        name: '',
+        email: widget.email,
+        role: 'student',
+      );
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => StudentHomeScreen(user: user)),
+        (route) => false,
+      );
+    } on DioException catch (e) {
+      final msg = e.response?.data is Map
+          ? (e.response!.data as Map)['message']?.toString() ?? 'Verification failed'
+          : 'Verification failed';
+      if (mounted) _showSnack(msg, AppColors.error);
+    } finally {
+      if (mounted) setState(() => _isVerifying = false);
+    }
   }
 
-  void _onResend() {
+  Future<void> _resendOtp() async {
     if (_resendSeconds > 0) return;
-    _startResendTimer();
+    try {
+      await sl<ApiClient>().dio.post('/auth/send-otp', data: {
+        'email': widget.email,
+      });
+      if (mounted) {
+        _startResendTimer();
+        _showSnack('Verification code resent', AppColors.success);
+      }
+    } on DioException catch (e) {
+      final msg = e.response?.data is Map
+          ? (e.response!.data as Map)['message']?.toString() ?? 'Failed to resend'
+          : 'Failed to resend';
+      if (mounted) _showSnack(msg, AppColors.error);
+    }
+  }
+
+  void _showSnack(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Verification code resent'),
-        backgroundColor: AppColors.success,
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(message), backgroundColor: color, behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -262,7 +282,7 @@ class _OtpScreenState extends State<OtpScreen> {
                         ),
                       )
                     : TextButton(
-                        onPressed: _onResend,
+                        onPressed: _resendOtp,
                         child: const Text(
                           'Resend Code',
                           style: TextStyle(
